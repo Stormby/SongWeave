@@ -1,0 +1,40 @@
+name: Build Songweave Mac installer
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test composition engine
+        run: |
+          node tools/package-editor.js
+          node tests/score.test.js
+          node tests/arrangement.test.js
+          node tests/editor-contract.test.js
+          c++ -std=c++17 -O2 tests/audition.cpp -o "$RUNNER_TEMP/audition"
+          "$RUNNER_TEMP/audition"
+      - name: Compile universal VST3
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
+          cmake --build build --config Release --target Songweave_VST3 --parallel 2
+      - name: Package and install on the test Mac
+        run: bash tools/package-for-installer.sh
+      - name: Validate installed VST3
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 https://github.com/Tracktion/pluginval/releases/download/v1.0.3/pluginval_macOS.zip -o "$RUNNER_TEMP/pluginval.zip"
+          ditto -x -k "$RUNNER_TEMP/pluginval.zip" "$RUNNER_TEMP/pluginval"
+          validator=$(find "$RUNNER_TEMP/pluginval" -path '*/Contents/MacOS/pluginval' -type f -print -quit)
+          test -x "$validator"
+          "$validator" --strictness-level 5 --validate "/Library/Audio/Plug-Ins/VST3/Songweave.vst3"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Songweave-Mac-Installer
+          path: dist/Songweave-Mac.pkg
+          if-no-files-found: error

@@ -28,7 +28,22 @@ const SW = (() => {
       harmony:'146251 162551 142651 164251 126451 136251', programs:[4,5,33,11]},
     'Cinematic': { bpm:96, meter:'4/4', form:'Score', mode:'Minor', change:2, spread:2, arp:4, bass:2,
       phrases:'11565321 13568765 15685321 12358765 55135685 13585643 11586531 13576853 15687531 11235685',
-      harmony:'166451 164551 146551 163451 164351 136451', programs:[60,49,43,45]}
+      harmony:'166451 164551 146551 163451 164351 136451', programs:[60,49,43,45]},
+    'Angelo Badalamenti': { composer:true, texture:'noir', title:'Dark synth / love theme', key:2,
+      instruments:'Try a soft analog lead, slow saw pad, sub bass and distant electric piano.',
+      bpm:55, meter:'4/4', form:'Score', mode:'Minor', change:4, spread:1, arp:1, bass:0,
+      phrases:'21355642 55642123 23466521 64332215 15322643 32144651 45632112 43564231',
+      harmony:'1166411 1144661 1663441 1166335 1446651 1136641', programs:[89,92,38,4]},
+    'Ólafur Arnalds': { composer:true, texture:'piano', title:'Felt piano / electronic pulse', key:2,
+      instruments:'Try felt piano, muted chamber strings, soft cello and a filtered pluck.',
+      bpm:82, meter:'4/4', form:'Evolving', mode:'Dorian', change:2, spread:1, arp:2, bass:0,
+      phrases:'25134216 31564352 15324135 46215324 62315241 35214632 15365423 24136251',
+      harmony:'1642411 1426611 1462251 1624451 1442631 1266411', programs:[0,49,42,10]},
+    'Max Richter': { composer:true, texture:'strings', title:'Slow string elegy', key:5,
+      instruments:'Try a legato violin, sustained string ensemble, cello or double bass, and viola on the Arp lane.',
+      bpm:64, meter:'4/4', form:'Evolving', mode:'Minor', change:2, spread:0, arp:1, bass:0,
+      phrases:'34554321 23445532 54433234 23455432 32122345 54345654 34543321 23432123',
+      harmony:'1463341 1634411 1346651 1664351 1433661 1366441', programs:[40,49,42,41]}
   };
   const scales = { Major:[0,2,4,5,7,9,11], Minor:[0,2,3,5,7,8,10], Dorian:[0,2,3,5,7,9,10] };
   const meters = {'4/4':[4,4],'3/4':[3,4],'6/8':[6,8]};
@@ -68,7 +83,7 @@ const SW = (() => {
   }
   const models=Object.fromEntries(Object.entries(styles).map(([name,s])=>[name,[train(s.phrases),train(s.harmony)]]));
   function defaults(genre='Neo-classical') {
-    const s=styles[genre]; return {genre,bpm:s.bpm,key:0,mode:s.mode,meter:s.meter,form:s.form,bars:64};
+    const s=styles[genre]; return {genre,bpm:s.bpm,key:s.key??0,mode:s.mode,meter:s.meter,form:s.form,bars:64};
   }
   function sections(config) {
     let bar=0;
@@ -131,6 +146,63 @@ const SW = (() => {
       Array.isArray(p.revisions)&&p.revisions.length===sections(c).length &&
       p.revisions.every(row=>Array.isArray(row)&&row.length===4&&row.every(validSeed));
   }
+  // Original role-specific writing for the three score palettes. Timing is measured in bars.
+  function composerBar(style,ctx){
+    const {b,sec,final,h,theme,rs,energy,pitch,barTicks,start,add}=ctx;
+    const put=(r,at,d,n,v)=>add(r,start+Math.round(at*barTicks),Math.min(Math.round(d*barTicks),barTicks-Math.round(at*barTicks)),n,v);
+    const level=(r,base)=>base+energy*25+rs[r]()*7;
+    const motif=theme[(b%4)*3];
+    const returnLift=sec.role==='peak'||sec.role==='return';
+    if(style.texture==='noir'){
+      const light=['b','peak','return'].includes(sec.role);
+      const pedal=light && b%8>=4 ? 4 : 0;
+      put(2,0,1,pitch(pedal,24),level(2,38));
+      const voicing=light?[h,h+4,h+9]:[h,h+4,h+7];
+      const tension=!light&&b%4>=2&&!final;
+      voicing.forEach((d,i)=>put(1,0,1,pitch(d,48)+(tension&&i===2?-1:0),level(1,30)+i*2));
+      if(final || (sec.role!=='intro' && (light||b%3!==0))){
+        const at=final?0:(b%2?.25:0);
+        const d=final?0:motif+(ctx.rev[0]&&rs[0]()<.4?1:0);
+        put(0,at,light&&!final&&b%4===2?.75-at:1-at,pitch(d,light?60:48),level(0,45));
+        if(light&&!final&&b%4===2)put(0,.75,.23,pitch(d+2,60),level(0,36));
+      }
+      if(!final && (b%4===3 || light&&b%4===1)){
+        const accent=rs[3]()<.5?h+4:h+7;
+        put(3,.5,.18,pitch(accent,60),level(3,18));put(3,.8125,.16,pitch(accent+2,60),level(3,14));
+      }
+    } else if(style.texture==='piano'){
+      const open=sec.role==='intro'||sec.role==='bridge'||sec.role==='outro';
+      const cell=[theme[(b%2)*3],theme[(b%2)*3+1],theme[(b%2)*3+2]];
+      const accents=final?[0]:open?(b%2?[.375]:[0,.625]):(b%2?[.125,.5,.8125]:[0,.375,.75]);
+      accents.forEach((at,j)=>{
+        const late=final?0:rs[0]()*0.012;
+        put(0,at+late,(accents[j+1]??1)-at-.035,pitch(final?0:cell[j]+(ctx.rev[0]&&rs[0]()<.4?1:0),60),level(0,j===0?40:28));
+      });
+      for(const [i,d] of [h,h+4,h+8].entries())put(1,0,1,pitch(d,48),level(1,20)+i);
+      put(2,0,1,pitch(h,36),level(2,31));
+      if(!final && (!open||b%4===2)){
+        const phase=Math.floor(rs[3]()*3);
+        const pulses=open?[.5,.875]:[0,.25,.375,.625,.875];
+        pulses.forEach((at,j)=>put(3,at,.09,pitch([h+7,h+9,h+11][(phase+j)%3],60),level(3,j===0?18:10)));
+      }
+    } else {
+      // Sustain the outer voices while an inner line changes the harmony underneath them.
+      put(2,0,1,pitch(h,36),level(2,35));
+      [h+2,h+7].forEach((d,i)=>put(1,0,1,pitch(d,48),level(1,31)+i*4));
+      const answer=sec.role!=='intro'||b>=sec.bars/2;
+      if(answer||final){
+        const d=final?0:motif+(ctx.rev[0]&&rs[0]()<.35?1:0);
+        const divided=!final && b%4===2;
+        put(0,0,divided?.5:1,pitch(d+(returnLift?7:0),60),level(0,44));
+        if(divided)put(0,.5,.5,pitch(d+(returnLift?7:0)+(d>3?-1:1),60),level(0,46));
+      }
+      if(!final && (energy>.44||b%2===1)){
+        const inner=h+(b%2?4:3),direction=(rs[3]()<.5?-1:1);
+        put(3,0,.5,pitch(inner,48),level(3,29));
+        put(3,.5,.5,pitch(inner+direction,48),level(3,31));
+      }
+    }
+  }
   function compose(p) {
     if(!valid(p))throw Error('Unsupported song settings.');
     const c=p.config, style=styles[c.genre], scale=scales[c.mode], secs=sections(c);
@@ -151,6 +223,11 @@ const SW = (() => {
         const slope={intro:.23,a:.08,b:.14,return:.09,bridge:-.08,peak:.18,outro:-.3}[sec.role];
         const energy=clamp(sectionEnergy+slope*(progress-.5),.1,1);
         const h=final?0:(bar===c.bars-2&&!drone?4:harmony[Math.floor(b/style.change)%8]);
+        if(style.composer){
+          const rs=ps.map((seed,r)=>random(hash(seed,rev[r],f,b,r)));
+          composerBar(style,{b,sec,final,h,theme,rs,rev,energy,pitch,barTicks,start,add});
+          continue;
+        }
         const chord=[h,h+2,h+4]; if(chill || (ambient && b%4<2))chord.push(h+6);
         if(drone){chord.splice(0,chord.length,0,4,(h===0?7:h+7));}
         const rs=ps.map((s,r)=>random(hash(s,rev[r],f,b,r)));
@@ -215,7 +292,7 @@ const SW = (() => {
         }
       }
       // Tie equal pitches within a section for the sustained styles; leave edit boundaries intact.
-      if(drone||ambient){
+      if(drone||ambient||style.composer){
         for(const r of [1,2]){
           const from=sec.bar*barTicks, sectionNotes=tracks[r].filter(n=>n.t>=from);
           tracks[r]=tracks[r].filter(n=>n.t<from);

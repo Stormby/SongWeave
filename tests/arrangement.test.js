@@ -27,4 +27,4 @@ for(const genre of Object.keys(W.styles)){
   change(0,'length',1);
   assert.equal(W.compose(p).sections[0].bars,1);
 }
-console.log('Custom arrangement editing, sizing, ordering, restore and export passed for all six genres.');
+console.log('Custom arrangement editing, sizing, ordering, restore and export passed for every style.');

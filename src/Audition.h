@@ -27,6 +27,8 @@ class Audition {
                levels[note.part] * note.velocity / 127., note.tick + note.duration, 0, 1, note.part, true};
     }
 public:
+    enum class Colour { plain, noir, piano, strings };
+    Colour colour = Colour::plain;
     bool playing = false;
     double tick = 0;
     void start(std::vector<PreviewNote>& notes, double total) {
@@ -54,9 +56,29 @@ public:
                 }
                 ringing = true;
                 const auto sine = std::sin(v.phase * 6.283185307179586);
-                const auto wave = (v.part == 0 || v.part == 2)
+                double wave = (v.part == 0 || v.part == 2)
                     ? .76*sine + .24*(1.0 - 4.0*std::abs(v.phase-.5)) : sine;
-                const auto value = wave * v.amp * std::min(1.0, v.age / attack[v.part]) * v.release;
+                double rise=attack[v.part], envelope=1;
+                constexpr double tau=6.283185307179586;
+                if(colour==Colour::noir){
+                    const double phase=v.phase*tau;
+                    wave=.72*sine+.19*std::sin(2*phase)+.09*std::sin(3*phase);
+                    rise=v.part==3?.012:(v.part==2?.09:.27);
+                    envelope=v.part==3?std::exp(-2.8*v.age):.90+.10*std::sin(1.8*v.age);
+                }else if(colour==Colour::piano){
+                    if(v.part==0||v.part==3){
+                        const double partial=std::exp(-5*v.age);
+                        wave=sine+.28*partial*std::sin(2*tau*v.phase)+.12*partial*std::sin(3*tau*v.phase);
+                        envelope=std::exp(-(v.part==3?6.0:1.45)*v.age);
+                        rise=.006;
+                    }else rise=.20;
+                }else if(colour==Colour::strings){
+                    const double phase=tau*v.phase+.019*std::sin(30*v.age);
+                    wave=.63*std::sin(phase)+.24*std::sin(2*phase)+.13*std::sin(3*phase);
+                    rise=v.part==2?.16:.24;
+                    envelope=.83+.17*std::min(1.0,v.age/.85);
+                }
+                const auto value=wave*v.amp*std::min(1.0,v.age/rise)*envelope*v.release;
                 l += float(value * (1-pans[v.part])); r += float(value * pans[v.part]);
                 v.phase += v.step; v.phase -= std::floor(v.phase); v.age += 1.0/rate;
             }

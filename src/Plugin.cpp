@@ -59,6 +59,9 @@ public:
         std::stable_sort(notes.begin(), notes.end(), [](const auto& a, const auto& b){ return a.tick < b.tick; });
         {
             SpinLock::ScopedLockType guard(playbackLock);
+            const auto texture=msg["texture"].toString();
+            audition.colour=texture=="noir"?Audition::Colour::noir:texture=="piano"?Audition::Colour::piano:
+                texture=="strings"?Audition::Colour::strings:Audition::Colour::plain;
             previewFrom = double(msg["from"]); previewEnd = previewFrom + double(msg["length"]);
             previewBpm = jlimit(20.,400.,double(msg["bpm"])); followHost = bool(msg["sync"]);
             mask.store(int(msg["mask"]) & 15); audition.start(notes, double(msg["length"]));

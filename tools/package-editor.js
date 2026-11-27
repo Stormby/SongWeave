@@ -6,7 +6,7 @@ fs.writeFileSync(path.join(root,'Songweave.html'),page);
 const examples=path.join(root,'examples');fs.mkdirSync(examples,{recursive:true});
 const keys=[2,9,0,2,5,4];
 Object.keys(W.styles).forEach((genre,i)=>{
-  const project=W.project({...W.defaults(genre),key:keys[i]},0x7020b+i*37);
+  const project=W.project({...W.defaults(genre),key:keys[i]??W.defaults(genre).key},0x7020b+i*37);
   const song=W.compose(project),name=path.join(examples,genre.replaceAll(' ','-'));
   fs.writeFileSync(name+'.mid',W.midi(song));
   fs.writeFileSync(name+'.songweave',JSON.stringify({project,scope:-1,sync:true},null,2)+'\n');

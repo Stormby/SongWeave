@@ -7,7 +7,12 @@ const SW = (() => {
   const forms = {
     'Song': [['Intro',1,'intro'],['Theme A',2,'a'],['Theme B',1,'b'],['A return',1,'return'],['Bridge',1,'bridge'],['Final theme',1,'peak'],['Outro',1,'outro']],
     'Evolving': [['Emergence',1,'intro'],['First light',2,'a'],['Expansion',2,'b'],['Still point',1,'bridge'],['Reprise',1,'return'],['Dissolve',1,'outro']],
-    'Score': [['Prologue',1,'intro'],['Statement',2,'a'],['Tension',1,'bridge'],['Ascent',1,'b'],['Climax',1,'peak'],['Reprise',1,'return'],['Resolution',1,'outro']]
+    'Score': [['Prologue',1,'intro'],['Statement',2,'a'],['Tension',1,'bridge'],['Ascent',1,'b'],['Climax',1,'peak'],['Reprise',1,'return'],['Resolution',1,'outro']],
+    'Refrain': [['Haze',2,'intro'],['Signal',1,'a'],['Afterimage',1,'bridge'],['Signal returns',2,'return'],['Fade',2,'outro']],
+    'Night drive': [['Ignition',1,'intro'],['Cruise',2,'a'],['Acceleration',2,'b'],['Blackout',1,'bridge'],['Last stretch',2,'peak']],
+    'Chamber suite': [['Prelude',1,'intro'],['Question',1,'a'],['Dance',2,'b'],['Interlude',1,'bridge'],['Answer',2,'return'],['Coda',1,'outro']],
+    'Slow ascent': [['Horizon',2,'intro'],['Orbit',2,'a'],['Lift',2,'b'],['Apex',1,'peak'],['Drift',1,'outro']],
+    'Vignettes': [['First image',1,'a'],['Reflection',2,'bridge'],['Second image',1,'b'],['Stillness',1,'intro'],['Remembered',2,'return'],['Last light',1,'outro']]
   };
   // Corpus tokens 1–9 are scale degrees, extending beyond the octave.
   const styles = {
@@ -43,7 +48,27 @@ const SW = (() => {
       instruments:'Try a legato violin, sustained string ensemble, cello or double bass, and viola on the Arp lane.',
       bpm:64, meter:'4/4', form:'Evolving', mode:'Minor', change:2, spread:0, arp:1, bass:0,
       phrases:'34554321 23445532 54433234 23455432 32122345 54345654 34543321 23432123',
-      harmony:'1463341 1634411 1346651 1664351 1433661 1366441', programs:[40,49,42,41]}
+      harmony:'1463341 1634411 1346651 1664351 1433661 1366441', programs:[40,49,42,41]},
+    'Johnny Jewel': {composer:true,texture:'afterglow',voice:'noir',title:'After-hours synth reprise',key:8,
+      instruments:'Try a breathy analog lead, dark organ, low sustained synth and a tape-echo pluck.',
+      bpm:59,meter:'4/4',form:'Refrain',mode:'Minor',change:4,
+      phrases:'5322215 4115322 5523144 6432215 3215532 4322155',harmony:'1166114 1441161 6114411 1144116',programs:[85,17,38,4]},
+    'Cliff Martinez': {composer:true,texture:'neon',voice:'noir',title:'Night-drive pulse',key:6,
+      instruments:'Try a glassy lead, cool synth pad, short sequenced bass and metallic mallets.',
+      bpm:99,meter:'4/4',form:'Night drive',mode:'Dorian',change:2,
+      phrases:'5125523 2352551 4523152 1254531 5312254 2531512',harmony:'1624415 1416251 6142411 1426145',programs:[93,89,38,11]},
+    'Alexandre Desplat': {composer:true,texture:'chamber',voice:'strings',title:'Chamber mystery / lilting theme',key:7,
+      instruments:'Try solo flute or clarinet, divided strings, pizzicato cello and harp or celesta.',
+      bpm:94,meter:'3/4',form:'Chamber suite',mode:'Minor',change:1,
+      phrases:'24654323 13543246 32654321 46323456 23465743 56243216',harmony:'1245361 1632451 4162351 2463511',programs:[73,48,43,46]},
+    'Hans Zimmer': {composer:true,texture:'orbit',voice:'strings',title:'Weightless organ / strings',key:9,
+      instruments:'Try a soft organ lead, broad legato strings, a low pedal and a gentle repeating piano.',
+      bpm:61,meter:'4/4',form:'Slow ascent',mode:'Major',change:4,
+      phrases:'12556235 35688653 52356865 23565632 55321256 12653521',harmony:'1644116 6611445 1466115 4166114',programs:[19,49,43,0]},
+    'Thomas Newman': {composer:true,texture:'glass',voice:'piano',title:'Glass and wood / reflective piano',key:4,
+      instruments:'Try intimate piano, airy strings, round bass and a mix of marimba and struck glass.',
+      bpm:78,meter:'4/4',form:'Vignettes',mode:'Major',change:2,
+      phrases:'26315236 53126312 62531356 15362631 36152635 52316531',harmony:'1426114 6142411 1264115 4162411',programs:[0,89,32,12]}
   };
   const scales = { Major:[0,2,4,5,7,9,11], Minor:[0,2,3,5,7,8,10], Dorian:[0,2,3,5,7,9,10] };
   const meters = {'4/4':[4,4],'3/4':[3,4],'6/8':[6,8]};
@@ -105,7 +130,7 @@ const SW = (() => {
     if(action==='rename'){layout[index].name=String(value).trim().slice(0,40);}
     else if(action==='length'){layout[index].bars=Number(value);}
     else if(action==='repeat'){
-      selected=index+1;layout.splice(selected,0,{...layout[index]});q.revisions.splice(selected,0,[...q.revisions[index]]);
+      selected=index+1;layout.splice(selected,0,{...layout[index]});q.revisions.splice(selected,0,JSON.parse(JSON.stringify(q.revisions[index])));
     } else if(action==='remove'){
       if(layout.length===1)throw Error('Keep at least one section.');
       layout.splice(index,1);q.revisions.splice(index,1);selected=Math.min(index,layout.length-1);
@@ -115,7 +140,7 @@ const SW = (() => {
       [layout[index],layout[selected]]=[layout[selected],layout[index]];
       [q.revisions[index],q.revisions[selected]]=[q.revisions[selected],q.revisions[index]];
     } else throw Error('Unknown section edit.');
-    q.config.layout=layout;q.config.bars=layout.reduce((n,s)=>n+s.bars,0);
+    delete q.config.generatedLayout;q.config.layout=layout;q.config.bars=layout.reduce((n,s)=>n+s.bars,0);
     if(!validLength(q.config))throw Error('Use a section name, 1–64 bars per section, up to 24 sections and 256 bars total.');
     return {project:q,selected};
   }
@@ -124,16 +149,70 @@ const SW = (() => {
     return {version:1,config:{...config},seed:seed>>>0,partSeeds:parts.map((_,i)=>hash(seed,i,101)),
       revisions:secs.map(()=>[0,0,0,0]),locks:[false,false,false,false]};
   }
-  function vary(p,scope,seed) {
-    const q=JSON.parse(JSON.stringify(p));
-    q.revisions.forEach((row,s)=>{if(scope<0||scope===s) row.forEach((v,r)=>{if(!q.locks[r])row[r]=hash(seed,s,r);});});
+  const familyId={intro:0,a:0,return:0,peak:0,outro:0,b:1,bridge:2};
+  function originalMaterial(p,f){
+    const [melody,harm]=models[p.config.genre];
+    return {theme:sample(melody,16,random(hash(p.partSeeds[0],f)),[1,3,5][f]),
+      harmony:sample(harm,8,random(hash(p.seed,f,73)),[1,4,6][f]),pace:styles[p.config.genre].change,
+      grooves:[0,0,0,0],depth:[0,0,0,0]};
+  }
+  function regenerate(p,scope,seed,amount=55){
+    const q=JSON.parse(JSON.stringify(p)),secs=sections(q.config),v=clamp(amount/100,0,1);
+    const [melody,harm]=models[q.config.genre],style=styles[q.config.genre];
+    const anyLock=q.locks.some(Boolean);
+    q.revisions.forEach((row,i)=>{
+      if((scope>=0&&scope!==i)||q.locks.every(Boolean))return;
+      const f=familyId[secs[i].role],plan=row[4]??originalMaterial(p,f);
+      // Related sections draw on the same new material, keeping a recognisable reprise.
+      const phrase=random(hash(seed,f,391)),chords=random(hash(seed,f,457));
+      const blend=(old,next,chance,rng)=>old.map((n,j)=>rng()<chance?next[j]:n);
+      if(!q.locks[0]){
+        const next=sample(melody,16,phrase,1+Math.floor(phrase()*6));
+        plan.theme=blend(plan.theme,next,v**1.15,phrase);
+      }
+      if(!anyLock && v>.15){
+        const first=style.harmony.replaceAll(' ','');
+        const next=sample(harm,8,chords,Number(first[Math.floor(chords()*first.length)]));
+        plan.harmony=blend(plan.harmony,next,v**1.5,chords);
+        if(chords()<v*v)plan.pace=Math.max(1,Math.round(style.change*[.5,1,1.5,2][Math.floor(chords()*4)]));
+      }
+      for(let r=0;r<4;r++)if(!q.locks[r]){
+        row[r]=hash(seed,i,r);
+        if(v>.1){plan.grooves[r]=hash(seed,f,r,481);plan.depth[r]=v;}
+      }
+      row[4]=plan;
+    });
     return q;
   }
-  function newIdea(p,seed) {
-    if(!p.locks.some(Boolean))return project(p.config,seed);
-    const q=JSON.parse(JSON.stringify(p)); // Keep the harmonic scaffold when preserving recorded parts.
-    for(let r=0;r<4;r++)if(!q.locks[r]){q.partSeeds[r]=hash(seed,r);q.revisions.forEach(row=>row[r]=0);}
-    return q;
+  function vary(p,scope,seed,amount=55){return regenerate(p,scope,seed,amount);}
+  function newIdea(p,seed,amount=55,keepKey=false){
+    const v=clamp(amount/100,0,1);
+    if(p.locks.some(Boolean)||v<.35)return regenerate(p,-1,seed,amount);
+    const c=JSON.parse(JSON.stringify(p.config)),rng=random(hash(seed,971));
+    if(v>=.7&&!keepKey){
+      const offsets=[5,7,2,10,3,9];
+      c.key=(c.key+offsets[Math.floor(rng()*offsets.length)])%12;
+    }
+    if(v>=.7&&(!c.layout||c.generatedLayout)){
+      // Keep the requested length. Rework the relative lengths and order of the middle sections.
+      const base=forms[c.form].map(([name,units,role])=>({name,bars:units*c.bars/8,role}));
+      const unit=Math.max(1,Math.floor(c.bars/32)),middle=base.slice(1,-1);
+      const from=middle.filter(s=>s.bars>unit),donor=from[Math.floor(rng()*from.length)];
+      const to=base.filter(s=>s!==donor),receiver=to[Math.floor(rng()*to.length)];
+      donor.bars-=unit;receiver.bars+=unit;
+      if(v>.85){
+        const at=1+Math.floor(rng()*(middle.length-1));
+        [middle[at],middle[at-1]]=[middle[at-1],middle[at]];
+      }
+      c.layout=[base[0],...middle,base.at(-1)];c.generatedLayout=true;
+    }
+    return regenerate(project(c,seed),-1,seed,amount);
+  }
+  function validPlan(plan){
+    const degrees=(a,n)=>Array.isArray(a)&&a.length===n&&a.every(x=>Number.isInteger(x)&&x>=0&&x<=8);
+    return plan&&degrees(plan.theme,16)&&degrees(plan.harmony,8)&&Number.isInteger(plan.pace)&&plan.pace>=1&&plan.pace<=16&&
+      Array.isArray(plan.grooves)&&plan.grooves.length===4&&plan.grooves.every(validSeed)&&
+      Array.isArray(plan.depth)&&plan.depth.length===4&&plan.depth.every(v=>Number.isFinite(v)&&v>=0&&v<=1);
   }
   const validSeed=v=>Number.isInteger(v)&&v>=0&&v<=0xffffffff;
   function valid(p) {
@@ -144,7 +223,7 @@ const SW = (() => {
       Array.isArray(p.partSeeds)&&p.partSeeds.length===4&&p.partSeeds.every(validSeed) &&
       Array.isArray(p.locks)&&p.locks.length===4&&p.locks.every(v=>typeof v==='boolean') &&
       Array.isArray(p.revisions)&&p.revisions.length===sections(c).length &&
-      p.revisions.every(row=>Array.isArray(row)&&row.length===4&&row.every(validSeed));
+      p.revisions.every(row=>Array.isArray(row)&&(row.length===4||row.length===5&&validPlan(row[4]))&&row.slice(0,4).every(validSeed));
   }
   // Original role-specific writing for the three score palettes. Timing is measured in bars.
   function composerBar(style,ctx){
@@ -185,6 +264,48 @@ const SW = (() => {
         const pulses=open?[.5,.875]:[0,.25,.375,.625,.875];
         pulses.forEach((at,j)=>put(3,at,.09,pitch([h+7,h+9,h+11][(phase+j)%3],60),level(3,j===0?18:10)));
       }
+    } else if(style.texture==='afterglow'){
+      const exposed=sec.role==='bridge'||sec.role==='intro';
+      put(2,0,1,pitch(final?0:b%8<6?0:h,24),level(2,30));
+      [h,h+4,h+8].forEach((d,i)=>put(1,0,1,pitch(d,48)-(i===2&&b%4===3?1:0),level(1,22)));
+      if(final||b%3!==(exposed?0:1)){
+        const at=final?0:(b%2?.625:.25);
+        put(0,at,1-at,pitch(final?0:motif,60),level(0,37));
+      }
+      if(!final&&b%3===2){
+        const echo=pitch(h+4+(b%2?2:0),60);
+        [.25,.625,.875].forEach((t,j)=>put(3,t,.10,echo,level(3,28)-8*j));
+      }
+    } else if(style.texture==='neon'){
+      const driving=energy>.55&&!final;
+      (driving?[0,.25,.5,.75]:[0]).forEach((at,i)=>put(2,at,driving?.16:1,pitch(h+(i===3?4:0),36),level(2,48)));
+      [h+2,h+6,h+8].forEach(d=>put(1,0,1,pitch(d,48),level(1,28)));
+      if(final||b%2===0||returnLift)put(0,final?0:.125,final?1:.70,pitch(final?0:motif,60),level(0,41));
+      if(!final)(driving?[.125,.375,.5625,.875]:[.375,.875]).forEach((t,i)=>
+        put(3,t,.075,pitch(h+[4,7,2,9][(i+b)%4],60),level(3,i===0?35:23)));
+    } else if(style.texture==='chamber'){
+      const dance=sec.role==='b'||returnLift;
+      (dance&&!final?[0,2/3]:[0]).forEach((at,i)=>put(2,at,final?1:.22,pitch(h+(i?4:0),36),level(2,37)));
+      [h+2,h+6].forEach(d=>put(1,0,1,pitch(d,48),level(1,33)));
+      const line=final?[0]:dance?[0,1/3,.5,5/6]:(b%3===1?[1/3]:[0,2/3]);
+      line.forEach((at,i)=>put(0,at,((line[i+1]??1)-at)*.91,pitch(final?0:theme[(b*2+i)%theme.length],60),level(0,46-i*2)));
+      if(!final)[1/6,.5,5/6].forEach((at,i)=>put(3,at,.12,pitch(h+[0,4,9][(i+b)%3],60),level(3,22+i*2)));
+    } else if(style.texture==='orbit'){
+      const lift=sec.role==='b'||returnLift;
+      put(2,0,1,pitch(lift?h:0,24),level(2,29));
+      [h,h+4,h+8].forEach((d,i)=>put(1,0,1,pitch(d,i===2?60:48),level(1,23)+i));
+      if(final||b%2===0||lift)put(0,0,1,pitch(final?0:motif,60),level(0,37));
+      if(!final)(lift?[0,.25,.5,.75]:[0,.5]).forEach((at,i)=>
+        put(3,at,lift?.21:.42,pitch(h+[4,7,8,7][i],60),level(3,19)+Math.min(b,6)));
+    } else if(style.texture==='glass'){
+      put(2,0,final?1:.83,pitch(h,36),level(2,31));
+      [h+4,h+8,h+9].forEach(d=>put(1,0,1,pitch(d,48),level(1,19)));
+      if(final||b%3!==1){
+        const line=final?[0]:b%2?[.5]:[0,.625];
+        line.forEach((at,i)=>put(0,at,(line[i+1]??1)-at,pitch(final?0:theme[(b+i)%theme.length],60),level(0,39)));
+      }
+      if(!final)(b%2?[.125,.5,.875]:[0,.375,.75]).forEach((at,i)=>
+        put(3,at,.085,pitch(h+[2,7,4][(i+b)%3],60),level(3,30-i*3)));
     } else {
       // Sustain the outer voices while an inner line changes the harmony underneath them.
       put(2,0,1,pitch(h,36),level(2,35));
@@ -208,13 +329,12 @@ const SW = (() => {
     const c=p.config, style=styles[c.genre], scale=scales[c.mode], secs=sections(c);
     const [num,den]=meters[c.meter], barTicks=PPQ*4*num/den, tracks=parts.map(()=>[]);
     const pitch=(degree,base)=>base+c.key+scale[((degree%7)+7)%7]+12*Math.floor(degree/7);
-    const [melModel,harmModel]=models[c.genre], drone=c.genre==='Drone', ambient=c.genre==='Ambient', chill=c.genre==='Chillout', newAge=c.genre==='New age';
-    const familyId={intro:0,a:0,return:0,peak:0,outro:0,b:1,bridge:2};
+    const drone=c.genre==='Drone', ambient=c.genre==='Ambient', chill=c.genre==='Chillout', newAge=c.genre==='New age';
     const add=(r,t,d,n,v)=>tracks[r].push({t:Math.round(t),d:Math.max(1,Math.round(d)),n:clamp(Math.round(n),0,127),v:clamp(Math.round(v),1,120)});
     for(const [si,sec] of secs.entries()){
       const f=familyId[sec.role], rev=p.revisions[si], ps=p.partSeeds;
-      const theme=sample(melModel,16,random(hash(ps[0],f)),[1,3,5][f]);
-      const harmony=sample(harmModel,8,random(hash(p.seed,f,73)),[1,4,6][f]);
+      const {theme,harmony,pace,grooves,depth}=rev[4]??originalMaterial(p,f);
+      const firstNote=tracks.map(t=>t.length);
       const sectionEnergy={intro:.34,a:.65,b:.8,return:.74,bridge:.44,peak:.91,outro:.32}[sec.role];
       let lastVoicing=null;
       for(let b=0;b<sec.bars;b++){
@@ -222,7 +342,7 @@ const SW = (() => {
         const progress=b/Math.max(1,sec.bars-1);
         const slope={intro:.23,a:.08,b:.14,return:.09,bridge:-.08,peak:.18,outro:-.3}[sec.role];
         const energy=clamp(sectionEnergy+slope*(progress-.5),.1,1);
-        const h=final?0:(bar===c.bars-2&&!drone?4:harmony[Math.floor(b/style.change)%8]);
+        const h=final?0:(bar===c.bars-2&&!drone?4:harmony[Math.floor(b/pace)%8]);
         if(style.composer){
           const rs=ps.map((seed,r)=>random(hash(seed,rev[r],f,b,r)));
           composerBar(style,{b,sec,final,h,theme,rs,rev,energy,pitch,barTicks,start,add});
@@ -289,6 +409,26 @@ const SW = (() => {
             add(3,start+at,Math.min(barTicks-at,barTicks/count*(ambient?.88:.5+ar()*.28)),
                 pitch(chord[index]+(newAge&&j===Math.floor(count/2)?7:0),60),vel(3,24)+(j%2?0:5));
           }
+        }
+      }
+      // Rephrase each unlocked lane on the beat grid before tying sustained notes.
+      // Piecewise-linear time maps are monotone and preserve bar and section boundaries.
+      for(let r=0;r<4;r++){
+        if(!depth[r])continue;
+        const phrase=random(grooves[r]),strength=depth[r],pivot=[.25,.5,.75][Math.floor(phrase()*3)];
+        const bend=(phrase()<.5?-1:1)*strength*Math.min(pivot,1-pivot)*.62;
+        const duty=1-strength*phrase()*(r===1||r===2?.12:.38);
+        const gap=Math.floor(phrase()*4),thin=(r===0||r===3)&&strength>.55;
+        const moved=x=>x<=pivot?x*(pivot+bend)/pivot:pivot+bend+(x-pivot)*(1-pivot-bend)/(1-pivot);
+        const startTick=sec.bar*barTicks, fresh=tracks[r].splice(firstNote[r]);
+        for(const n of fresh){
+          const bar=Math.floor((n.t-startTick)/barTicks),origin=startTick+bar*barTicks;
+          const at=(n.t-origin)/barTicks,end=(n.t+n.d-origin)/barTicks;
+          if(thin && bar%4===gap && at>.2 && at<.87 && bar+sec.bar!==c.bars-1)continue;
+          const t=origin+Math.round(moved(at)*barTicks);
+          const sustain=end>=.9999&&at<.02;
+          const off=origin+Math.round(moved(end)*barTicks);
+          tracks[r].push({...n,t,d:Math.max(1,Math.round((off-t)*(sustain?1:duty)))});
         }
       }
       // Tie equal pitches within a section for the sustained styles; leave edit boundaries intact.

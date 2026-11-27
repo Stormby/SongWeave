@@ -21,7 +21,7 @@ for bundle in bundles:
     bundle["BundleIsRelocatable"]=False
 path.write_bytes(plistlib.dumps(bundles))
 PY
-pkgbuild --root "$stage" --component-plist "$scratch_dir/components.plist" --install-location "$destination" --ownership recommended --identifier music.songweave.installer --version 0.2.0 dist/Songweave-Mac.pkg
+pkgbuild --root "$stage" --component-plist "$scratch_dir/components.plist" --install-location "$destination" --ownership recommended --identifier music.songweave.installer --version 0.3.0 dist/Songweave-Mac.pkg
 # Smoke-install only on the disposable macOS runner.
 if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
     sudo installer -pkg dist/Songweave-Mac.pkg -target /

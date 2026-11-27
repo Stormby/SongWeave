@@ -47,6 +47,10 @@ function mount(native){
     ids.play.click();assert.equal(outputs.at(-1).type,'play');assert(outputs.at(-1).events.length>500);
     handlers.swClock({tick:480,bpm:112,playing:true});assert(ids.progress.value>0);
     ids.play.click();assert.equal(outputs.at(-1).type,'stop');
+    const beforeSlider=read().project;
+    ids.variety.value='90';ids.variety.oninput();ids.variety.onchange();assert.equal(read().variety,90);
+    assert.deepEqual(read().project,beforeSlider);
+    ids.keepKey.checked=true;ids.keepKey.onchange();assert.equal(read().keepKey,true);
     ids.route.value='virtual';ids.route.onchange();
     assert.equal(read().output,'virtual');
     assert.deepEqual(Buffer.from(read().midiData,'base64'),fs.readFileSync(root+'/examples/Cinematic.mid'));

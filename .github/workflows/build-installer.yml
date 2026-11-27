@@ -15,6 +15,7 @@ jobs:
         run: |
           node tools/package-editor.js
           node tests/score.test.js
+          node tests/variety.test.js
           node tests/arrangement.test.js
           node tests/editor-contract.test.js
           c++ -std=c++17 -O2 tests/audition.cpp -o "$RUNNER_TEMP/audition"

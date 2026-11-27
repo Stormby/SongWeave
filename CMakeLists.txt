@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Songweave VERSION 0.2.0 LANGUAGES C CXX)
+project(Songweave VERSION 0.3.0 LANGUAGES C CXX)
 if(NOT APPLE)
     message(FATAL_ERROR "The plug-in target is macOS. The offline edition runs in a browser.")
 endif()

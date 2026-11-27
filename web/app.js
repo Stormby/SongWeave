@@ -28,7 +28,16 @@
       route==='vst'?'The four parts share one VST3 MIDI output. Use Virtual ports for separate Live tracks.':'';
   }
   function remember(){history.push(JSON.stringify(p));if(history.length>24)history.shift();}
-  function stored(){return JSON.stringify({project:p,sync:$('sync').checked,scope,mute,solo,output:route,channels});}
+  let variety=55,keepKey=false;
+  function showVariety(){
+    $('variety').value=variety;$('varietyValue').textContent=variety+'%';$('keepKey').checked=keepKey;
+    $('varietyHint').textContent=variety<35?'Close takes · change phrasing and touch.':variety<70?
+      'Fresh ideas · reshape motifs and chords.':'Wide takes · New song can change key and section flow.';
+  }
+  $('variety').oninput=()=>{variety=Number($('variety').value);showVariety();};
+  $('variety').onchange=()=>{variety=Number($('variety').value);showVariety();persist();};
+  $('keepKey').onchange=()=>{keepKey=$('keepKey').checked;persist();};
+  function stored(){return JSON.stringify({project:p,variety,keepKey,sync:$('sync').checked,scope,mute,solo,output:route,channels});}
   function persist(){
     if(!ready)return;
     if(native){
@@ -43,6 +52,7 @@
   function restore(data){
     const saved=typeof data==='string'?JSON.parse(data):data, item=saved?.project??saved;
     if(!SW.valid(item))throw Error('This file is not a supported Songweave project.');
+    variety=Number.isInteger(saved.variety)&&saved.variety>=0&&saved.variety<=100?saved.variety:55;keepKey=saved.keepKey===true;
     p=item;scope=Number.isInteger(saved.scope)&&saved.scope>=0&&saved.scope<SW.sections(p.config).length?saved.scope:-1;
     const flags=a=>Array.isArray(a)&&a.length===4&&a.every(x=>typeof x==='boolean')?a:[false,false,false,false];
     route=['virtual','vst'].includes(saved.output)?saved.output:'internal';
@@ -101,7 +111,7 @@
   }
   function setScope(next){stop();scope=next;render(false);status('Preview, Variation and MIDI export apply to '+scopeName().toLowerCase()+'.');}
   function render(recompose=true){
-    if(recompose)song=SW.compose(p);
+    if(recompose)song=SW.compose(p);showVariety();
     const c=p.config;
     const style=SW.styles[c.genre];$('instrumentTip').hidden=!style.composer;
     $('instrumentTip').textContent=style.composer?style.title+' · '+style.instruments:'';
@@ -174,7 +184,7 @@
       t:Math.max(n.t,from)-from,d:Math.min(n.t+n.d,to)-Math.max(n.t,from),n:n.n,v:n.v,r}))).sort((a,b)=>a.t-b.t);
     playFrom=from;playTo=to;index=0;clock=60/bpm()/SW.PPQ;playing=true;$('play').textContent='■ Stop';
     if(native){
-      awaitingPreview=true;emit('play',{from,texture:SW.styles[p.config.genre].texture||'',events:queue,length:to-from,bpm:bpm(),sync:$('sync').checked,
+      awaitingPreview=true;emit('play',{from,texture:SW.styles[p.config.genre].voice||SW.styles[p.config.genre].texture||'',events:queue,length:to-from,bpm:bpm(),sync:$('sync').checked,
         mask:SW.parts.reduce((v,_,r)=>v|(audible(r)?1<<r:0),0)});return;
     }
     try{
@@ -202,12 +212,12 @@
   for(const id of ['genre','key','mode','meter','bars','form']){
     $(id).onchange=()=>{
       const value=$(id).value;remember();stop();
-      if(id==='genre'){const c=p.config;p=SW.project({...SW.defaults(value),bars:c.bars,...(c.layout?{layout:c.layout}:{})},seed());}
+      if(id==='genre'){const c=p.config;p=SW.project({...SW.defaults(value),bars:c.bars,...(c.layout&&!c.generatedLayout?{layout:c.layout}:{})},seed());}
       else if(id==='form'||id==='bars'){
-        const config={...p.config,[id]:id==='bars'?Number(value):value};delete config.layout;
+        const config={...p.config,[id]:id==='bars'?Number(value):value};delete config.layout;delete config.generatedLayout;
         if(![32,64,96,128].includes(config.bars))config.bars=[32,64,96,128].reduce((a,b)=>Math.abs(config.bars-a)<=Math.abs(config.bars-b)?a:b);
         p=SW.project(config,p.seed);
-      }else{p.config[id]=id==='key'?Number(value):value;}
+      }else{p.config[id]=id==='key'?Number(value):value;if(id==='key')keepKey=true;}
       scope=-1;render();status('Arrangement updated. Back restores the previous take.');
     };
   }
@@ -223,8 +233,8 @@
   $('route').onchange=()=>{stop();route=$('route').value;portError=false;render(false);};
   $('sync').onchange=()=>{stop();render(false);};
   $('play').onclick=preview;$('whole').onclick=()=>setScope(-1);
-  $('new').onclick=()=>{stop();remember();p=SW.newIdea(p,seed());scope=-1;render();status('New take. Locked parts are preserved.');};
-  $('variation').onclick=()=>{stop();remember();p=SW.vary(p,scope,seed());render();status('New variation of '+scopeName().toLowerCase()+'.');};
+  $('new').onclick=()=>{stop();remember();p=SW.newIdea(p,seed(),variety,keepKey);scope=-1;render();status('New take. Locked parts are preserved.');};
+  $('variation').onclick=()=>{stop();remember();p=SW.vary(p,scope,seed(),variety);render();status('New variation of '+scopeName().toLowerCase()+'.');};
   $('back').onclick=()=>{if(history.length){stop();p=JSON.parse(history.pop());if(scope>=SW.sections(p.config).length)scope=-1;render();status('Previous take restored.');}};
   $('export').onclick=()=>saveMidi(-1);
   $('save').onclick=()=>{const data=new TextEncoder().encode(stored()),name='Songweave-'+stamp()+'.songweave';

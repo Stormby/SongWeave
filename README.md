@@ -1,6 +1,6 @@
 # Songweave
 
-Songweave 0.2 is a generative MIDI instrument for macOS 13+ and Ableton Live 12. Each composition has melody, chords, bass and arp tracks.
+Songweave 0.3 is a generative MIDI instrument for macOS 13+ and Ableton Live 12. Each composition has melody, chords, bass and arp tracks.
 
 ## Play four instruments in Ableton Live
 
@@ -23,3 +23,15 @@ Choose **Style → Composer presets** and select a name. Each preset generates o
 | Max Richter | A slow upper string line, sustained bass and a moving inner voice on the Arp lane. | Violin / string ensemble / low cello / viola |
 
 The built-in audition gives these palettes different attacks, harmonic colours and envelopes. Virtual MIDI sends the written performance to the instruments you choose in Live.
+
+## Variety
+
+The slider affects the next **Variation**, **Vary section** or **New song**. Close takes retain the motif and chord plan and vary performance details. Higher settings replace more melodic and harmonic material, alter the rate of chord changes and reshape the timing and space in each lane. A variation stays in the current key and layout. At 70% or higher **New song** can choose a different key and rebalance section lengths, and above 85% it can reorder middle sections. **Keep key** holds the tonal centre. Choosing a key manually enables it. Hand-edited layouts are retained. Locking a part holds the shared harmonic plan and form so the other instruments still fit.
+
+| Additional composer preset | Musical character |
+| --- | --- |
+| Johnny Jewel | Late-entering analog lead, shadowed organ chords and fading echoes over a low pedal. |
+| Cliff Martinez | Short, gated bass pulses and offbeat metallic mallets beneath a floating synth line. |
+| Alexandre Desplat | A chamber suite weaving suspense, nimble woodwind phrases and lilting harp figures in triple time. |
+| Hans Zimmer | A spacious slow ascent with organ, sustained strings and a restrained repeating piano figure. |
+| Thomas Newman | Fragmented piano phrases and asymmetrical mallet patterns, with room between the attacks. |

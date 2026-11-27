@@ -7,7 +7,7 @@ product="SongWave Soundscapes"
 built="build/Soundscapes_artefacts/Release"
 vst="Library/Audio/Plug-Ins/VST3/$product.vst3"
 app="Applications/$product.app"
-pkg="dist/SongWave-Soundscapes-1.0-Mac.pkg"
+pkg="dist/SongWave-Soundscapes-1.1-Mac.pkg"
 mkdir -p "$stage/Library/Audio/Plug-Ins/VST3" "$stage/Applications" dist
 ditto "$built/VST3/$product.vst3" "$stage/$vst"
 ditto "$built/Standalone/$product.app" "$stage/$app"
@@ -25,7 +25,7 @@ for bundle in bundles:
     bundle["BundleIsRelocatable"]=False
 path.write_bytes(plistlib.dumps(bundles))
 PY
-pkgbuild --root "$stage" --component-plist "$scratch_dir/components.plist" --install-location / --ownership recommended --identifier music.songweave.soundscapes.installer --version 1.0.0 "$pkg"
+pkgbuild --root "$stage" --component-plist "$scratch_dir/components.plist" --install-location / --ownership recommended --identifier music.songweave.soundscapes.installer --version 1.1.0 "$pkg"
 if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
     sudo installer -pkg "$pkg" -target /
     for item in "$vst" "$app"; do

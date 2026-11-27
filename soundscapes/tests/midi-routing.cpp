@@ -1,6 +1,6 @@
 // This runs against the plug-in's shared processor code on a real macOS runner.
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "../src/VirtualPorts.h"
+#include "../src/LiveMidi.h"
 #include <atomic>
 #include <iostream>
 #include <stdexcept>
@@ -117,6 +117,19 @@ int main(){
         MemoryBlock saved;processor->getStateInformation(saved);
         auto persisted=JSON::parse(String::fromUTF8((const char*)saved.getData(),int(saved.getSize())));
         const int slot=persisted["portSlot"];check(slot>0,"virtual port slot saved");
+        {
+            LiveMidi previewRoute;
+            previewRoute.configure(state("vst"));
+            previewRoute.setPreview(state("vst",true)["midiData"].toString());
+            MidiBuffer auditionOut;
+            previewRoute.block(auditionOut,512,24000,60,3,0,1920,63,false);
+            bool wheel=false;
+            for(const auto e:auditionOut)wheel|=e.getMessage().isPitchWheel()&&e.getMessage().getPitchWheelValue()==6144;
+            check(wheel,"draft has its own MIDI timeline");
+            auditionOut.clear();
+            previewRoute.block(auditionOut,512,24000,60,1,0,1920,63,false);
+            for(const auto e:auditionOut)check(!e.getMessage().isPitchWheel()||e.getMessage().getPitchWheelValue()==8192,"accepted timeline restored");
+        }
         MidiReader reader(slot);
         VirtualPorts second;check(second.open(slot)&&second.slot!=slot,"duplicate instances have separate port names");
         block(0,true);check(output.isEmpty(),"virtual mode does not double-send VST notes");reader.wait(reader.on);

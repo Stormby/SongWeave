@@ -26,3 +26,22 @@ for(const [library,[ids]] of Object.entries(S.libs))for(const style of ids){
   count++;
 }
 console.log(count+' compatible library/style combinations, full hour, stems, tempo, tuning and note pairing passed');
+const backing={version:1,library:'NADA',style:0,variety:55,hit:60,seed:555,pulse:false}, original=S.compose(backing);
+for(const [style,ids] of S.choices.entries()){
+  assert.equal(new Set(ids).size,6);
+  for(const id of ids){
+    const lead={style,id,seed:88000+style,oct:0};
+    const assigned=S.compose({...backing,lead}),shift=S.compose({...backing,lead:{...lead,oct:1}});
+    for(let r=1;r<6;r++){assert.deepEqual(original.tracks[r],assigned.tracks[r]);assert.deepEqual(original.controls[r],assigned.controls[r]);}
+    assigned.tracks[0].forEach((n,i)=>{assert(n.n>=S.catalog[id].lo&&n.n<=S.catalog[id].hi);assert.equal(shift.tracks[0][i].n,n.n+12);});
+    inspect(S.midi(assigned),7,3600*480);
+    if([3,13].includes(style))assert(assigned.controls[0].some(e=>e.b===6144));
+  }
+  const variants=new Set();for(let seed=1;seed<=20;seed++){
+    const lead={style,id:ids[0],seed,oct:0};
+    const first=S.compose({...backing,lead}).tracks[0].filter(n=>n.t<45*480);
+    variants.add(first.map(n=>n.n).join(','));assert(new Set(first.map(n=>n.d)).size>=4);
+  }
+  assert.equal(variants.size,20,S.leadStyles[style]);
+}
+console.log('84 lead assignments, 280 first-45-second pitch signatures, octave shifts and backing stability verified.');

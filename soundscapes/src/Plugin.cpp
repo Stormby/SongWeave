@@ -20,6 +20,7 @@ class Composer final : public AudioProcessor {
     String savedState;
     Audition audition;
     std::atomic<int> mask {lanes::all};
+    bool temporaryPreview=false;
     double previewBpm = 90, previewFrom = 0, previewEnd = 0;
     bool followHost = true;
 public:
@@ -46,6 +47,8 @@ public:
         audition.stop(); active.store(false);
     }
     void start(const var& msg) {
+        const auto temporaryMidi=msg["previewMidi"].toString();
+        midi.setPreview(temporaryMidi);
         std::vector<PreviewNote> notes;
         if (const auto* events = msg["events"].getArray()) {
             notes.reserve(size_t(events->size()));
@@ -59,6 +62,7 @@ public:
         std::stable_sort(notes.begin(), notes.end(), [](const auto& a, const auto& b){ return a.tick < b.tick; });
         {
             SpinLock::ScopedLockType guard(playbackLock);
+            temporaryPreview=temporaryMidi.isNotEmpty();
             previewFrom = double(msg["from"]); previewEnd = previewFrom + double(msg["length"]);
             previewBpm = jlimit(20.,400.,double(msg["bpm"])); followHost = bool(msg["sync"]);
             mask.store(int(msg["mask"]) & lanes::all); audition.start(notes, double(msg["length"]));
@@ -88,7 +92,7 @@ public:
             if(lock.isLocked() && transport && routing && audition.playing){audition.stop();active.store(false);}
             if(transport && routing){source=1;tick=hostTick;}
             else if(lock.isLocked() && audition.playing && output.getNumChannels()>=2){
-                source=2; tick=previewFrom+audition.tick; limit=previewEnd;
+                source=temporaryPreview?3:2; tick=previewFrom+audition.tick; limit=previewEnd;
                 speed=followHost && tempo>0?tempo:previewBpm;
                 audition.render(output.getWritePointer(0),output.getWritePointer(1),output.getNumSamples(),rate,speed,mask.load());
                 if(routing)output.clear();

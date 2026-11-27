@@ -8,7 +8,8 @@ class LiveMidi {
     juce::SpinLock lock;
     juce::CriticalSection configurationLock;
     VirtualPorts ports;
-    MidiTimeline timeline;
+    MidiTimeline timeline,preview;
+    double auditionLength=0;
     juce::String lastScore;
     std::array<int,lanes::count> desiredChannels{1,2,3,4,5,10},channels{1,2,3,4,5,10};
     int desired=internal,mode=internal,lastTransport=0;
@@ -59,6 +60,13 @@ class LiveMidi {
 public:
     std::atomic<int> portNumber{0};
     std::atomic<bool> routed{false},portError{false};
+    void setPreview(const juce::String& data){
+        if(data.isEmpty())return;
+        MidiTimeline next;double total=0;
+        if(!decode(data,next,total))total=0;
+        const juce::SpinLock::ScopedLockType guard(lock);
+        preview.events.swap(next.events);preview.spans.swap(next.spans);auditionLength=total;changed=true;
+    }
     void configure(const juce::var& state) {
         const juce::ScopedLock serial(configurationLock);
         const auto route=state["output"].toString();
@@ -90,16 +98,17 @@ public:
         if(!guard.isLocked()||rate<=0)return;
         const auto now=mach_absolute_time();
         auto emit=[&](int r,int p,int v,int offset){send(r,p,v,offset,out,now,rate);};
-        if(changed||lastTransport!=transport){timeline.release(emit);mode=desired;channels=desiredChannels;changed=false;}
+        if(changed||lastTransport!=transport){(lastTransport==3?preview:timeline).release(emit);mode=desired;channels=desiredChannels;changed=false;}
         lastTransport=transport;
         if(!transport||mode==internal||(offline&&mode==external)){timeline.release(emit);return;}
-        timeline.render(tick,480.0*bpm/(60.0*rate),samples,std::min(limit,length),mask,emit);
+        auto& selected=transport==3?preview:timeline;
+        selected.render(tick,480.0*bpm/(60.0*rate),samples,std::min(limit,transport==3?auditionLength:length),mask,emit);
     }
     void suspend(){
         const juce::SpinLock::ScopedLockType guard(lock);
         if(mode==external){
             auto now=mach_absolute_time();
-            juce::MidiBuffer unused;timeline.release([&](int r,int n,int v,int){send(r,n,v,0,unused,now,48000.0);});
+            juce::MidiBuffer unused;(lastTransport==3?preview:timeline).release([&](int r,int n,int v,int){send(r,n,v,0,unused,now,48000.0);});
         }
         // A VST host can only receive its pending releases in a process callback.
         changed=true;

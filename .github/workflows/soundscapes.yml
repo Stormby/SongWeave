@@ -17,7 +17,7 @@ jobs:
       - name: Test composition engine
         run: |
           node tests/composition.test.js
-          node --check web/app.js
+          node tests/workshop.test.js
       - name: Check CoreMIDI source registration
         run: |
           c++ -std=c++17 -Isrc -framework CoreMIDI -framework CoreFoundation -x c++ -o "$RUNNER_TEMP/check-ports" - <<'CPP'
@@ -44,5 +44,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: SongWave-Soundscapes-Mac
-          path: soundscapes/dist/SongWave-Soundscapes-1.0-Mac.pkg
+          path: soundscapes/dist/SongWave-Soundscapes-1.1-Mac.pkg
           if-no-files-found: error

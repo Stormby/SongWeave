@@ -44,7 +44,161 @@ const SC=(()=>{
     return a;
   }
   function random(seed){return ()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};}
-  function valid(p){return p&&Object.hasOwn(libs,p.library)&&libs[p.library][0].includes(p.style)&&p.version===1&&
+  // Instrument ranges in Live's convention (C3 = MIDI 60).
+  // "window" means a conservative composing register, not a published sample map.
+  const libraryNames=Object.keys(libs);
+  const catalog={};
+  function patch(id,lib,name,family,lo,hi,range='window'){
+    catalog[id]={lib:libraryNames[lib],name,family,lo,hi,range};
+  }
+  patch('ney',1,'Persian Ney','wind',54,74,'manual F♯2–D4');
+  patch('dwney',3,'Persian Ney','wind',54,74,'manual F♯2–D4');
+  patch('turkish',3,'Turkish Ney','wind',67,87,'manual G3–D♯5');
+  patch('duduk',3,'Armenian Duduk','wind',52,72,'manual E2–C4');
+  patch('oud',1,'Oud','pluck',57,72);
+  patch('santur',1,'Santur','strike',57,79);
+  patch('kaman',1,'Turkish Violin','bow',55,91,'manual G2–G5');
+  patch('nbow',0,'Ethnic Violin','bow',55,79);
+  patch('violin',0,'Violin','bow',55,82);
+  patch('reed',0,'Eastern Double Reed','wind',60,79);
+  patch('bansuri',0,'Indian Low Bansuri','wind',55,76);
+  patch('dizi',0,'Chinese Dizi','wind',60,84);
+  patch('hulusi',0,'Chinese Hulusi','wind',60,77);
+  patch('xh',6,'Xiao','blow',60,79);
+  patch('exiao',4,'Xiao Long Notes','wind',55,79);
+  patch('edizi',4,'Low Dizi Long Notes','wind',53,76);
+  patch('ehul',4,'Hulusi','wind',60,77);
+  patch('shenai',4,'Shenai Long Notes','wind',60,79);
+  patch('ocarina',4,'Big Ocarine','wind',60,79);
+  patch('sanza',4,'Sanza Chromatic','pluck',60,81);
+  patch('whistle',5,'Whistle','wind',62,86,'manual D3–D5');
+  patch('wood',5,'Traditional Wooden Flute','wind',57,81,'manual A2–A4');
+  patch('harp',5,'Gothic Harp','pluck',53,79);
+  patch('lute',5,'Medieval Lute','pluck',55,76);
+  patch('nyckel',5,'Nyckelharpa','bow',60,79);
+  patch('tagel',2,'Big Tagelharpa','bow',62,76,'manual D3–E4 legato zone');
+  patch('stagel',2,'Small Tagelharpa','bow',67,79,'manual G3–G4 legato zone');
+  patch('bone',2,'Deer Bone Flute','wind',60,76);
+  patch('lyre',2,'Cologne Lyre · finger','pluck',55,76);
+  patch('folk',0,'Small Wooden Flute','wind',60,79);
+  patch('celtia',7,'Celtia','voice',60,79);
+  patch('tenor',7,'Medieval Tenor','voice',52,69);
+  patch('heroica',7,'Heroica','voice',60,79);
+  patch('bard',7,'Bard','voice',55,72);
+  patch('silence',0,'Voice of Silence','voice',60,79);
+  patch('choir',0,'Meditation Choir','voice',55,76);
+  patch('bowl',0,'Crystal Singing Bowls','strike',60,79);
+  patch('bells',0,'Meditation Bells','strike',60,81);
+  patch('tongue',0,'Steel Tongue Drum','strike',55,76);
+  patch('kalimba',0,'Kalimba','pluck',60,81);
+  patch('tibetan',4,'Tibetan Bowls','strike',55,76);
+  patch('chime',4,'Crystal Chimes I','strike',60,82);
+  const arabic=names.length;
+  const leadStyles=[...names,'Arabic maqam · Bayati'];
+  const choices=[
+    'bansuri silence harp exiao kalimba celtia','bowl folk harp choir tibetan exiao','duduk bone tenor santur kaman reed',
+    'ney dwney santur oud kaman reed','bansuri nbow shenai violin silence folk','tagel stagel nyckel bone lyre nbow',
+    'whistle wood harp violin celtia folk','dizi hulusi xh exiao edizi ehul','bone sanza ocarina tongue kalimba lyre',
+    'wood harp lute bard tenor nyckel','celtia tenor heroica bard silence choir','bowl bells tongue tibetan chime kalimba',
+    'xh folk wood harp bone ocarina','oud turkish duduk kaman santur reed'
+  ].map(s=>s.split(' '));
+  // Per-style anchor degrees, cadence, rhythmic vocabulary, silence and ornament.
+  // Negative degrees descend below tonic; values can cross the octave.
+  const recipes=[
+    [[0,2,4,2],[2,1,0],[.55,1.4,2.8],13,'linger'],
+    [[3,1,4,0],[3,0],[1.6,3.1,4.6],22,'space'],
+    [[0,1,4,5],[4,1,0],[.37,1.2,2.9],14,'shadow'],
+    [[2,3,4,2],[3,2,1,0],[.26,.52,.94,1.9],7,'persian'],
+    [[0,2,3,4],[3,2,1,0],[.33,.8,1.65,2.7],10,'alap'],
+    [[0,4,2,0],[4,2,1,0],[.4,.75,1.6,2.5],8,'call'],
+    [[0,2,4,5],[4,2,1,0],[.23,.62,1.15,2.6],8,'air'],
+    [[0,2,4,3],[3,2,1,0],[.24,.55,1.05,2.2],9,'bamboo'],
+    [[0,2,0,3],[2,0],[.38,.75,1.5],8,'pulse'],
+    [[0,3,4,2],[2,1,0],[.5,1,1.5,2],8,'modal'],
+    [[0,2,3,1],[2,1,0],[.65,1.2,2.15],12,'vowel'],
+    [[0,3,1,4],[2,0],[1.1,2.3,3.1],17,'ring'],
+    [[3,1,4,2],[3,1,0],[.34,1,1.9],13,'bird'],
+    [[0,2,3,5],[3,2,1,0],[.24,.53,.95,1.85],8,'bayati']
+  ];
+  function defaultLead(p){
+    const list=choices[p.style],id=list.find(id=>catalog[id].lib===p.library)||list[0];
+    return {style:p.style,id,seed:p.seed,oct:0};
+  }
+  function validLead(l){
+    return l&&Number.isInteger(l.style)&&choices[l.style]?.includes(l.id)&&Number.isInteger(l.seed)&&l.seed>=0&&l.seed<=4294967295&&Number.isInteger(l.oct)&&Math.abs(l.oct)<=2&&[undefined,'Spacious','Balanced','Ornamented'].includes(l.feel);
+  }
+  function writeLead(p,root,note,tracks,controls,inst){
+    const l=p.lead,a=catalog[l.id],s=l.style,[anchors,cadence,beats,gap,kind]=recipes[s];
+    const scale=s===arabic?[0,150,300,500,700,800,1000]:styles[names[s]][0];
+    const rng=random(l.seed),pick=arr=>arr[Math.floor(rng()*arr.length)];
+    const clip=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
+    const scalePitch=d=>1200*Math.floor(d/scale.length)+scale[(d%scale.length+scale.length)%scale.length];
+    const base=root+12*Math.round(((a.lo+a.hi)/2-root-4)/12);
+    function pitch(d){
+      const c=scalePitch(d),key=Math.round(c/100);
+      let n=base+key;while(n<a.lo)n+=12;while(n>a.hi)n-=12;
+      return [n+12*l.oct,c-key*100];
+    }
+    const size=kind==='call'?4:kind==='ring'?3:6;
+    function motif(){
+      const len=size+Math.floor(rng()*(kind==='call'?4:6)),m=[];
+      let degree=pick(anchors),crest=pick(anchors.slice(1))+pick([0,1,2]);
+      for(let i=0;i<len;i++){
+        const dir=i<len*.52?Math.sign(crest-degree):Math.sign(cadence[0]-degree);
+        if(i)degree=clip(degree+(rng()<.73?dir:pick([-1,1]))*pick([1,1,1,2,3]),-2,scale.length+2);
+        if(kind==='call'&&i===1)degree=pick([3,4,6]);
+        if(kind==='bayati'&&i===Math.floor(len/2))degree=3;
+        if(kind==='alap'&&i===2)degree=2;
+        if(kind==='persian'&&i<3)degree=[pick([2,3,4]),2,1][i];
+        if(kind==='bayati'&&i<3)degree=[0,pick([0,1]),pick([1,2])][i];
+        if(kind==='call'&&i===2)degree=pick([2,4]);
+        if(kind==='bamboo'&&i===2)degree=pick([2,3,4]);
+        m.push({d:degree,len:pick(beats)*(.85+.3*rng()),accent:rng()});
+      }
+      const end=cadence.slice(-pick([2,3,4]));
+      for(const d of end)m.push({d,len:pick(beats),accent:rng()});
+      m[m.length-1].len=pick(beats.slice(-2))*1.6;
+      return m;
+    }
+    const themes=[motif(),motif(),motif()];
+    const space=l.feel==='Spacious'?1.45:l.feel==='Ornamented'?.8:1;
+    const wind=['wind','blow','voice'].includes(a.family);
+    inst[0]=a.lib+' · '+a.name;tracks[0].length=0;controls[0].length=0;
+    let t=2+rng()*3,index=0;
+    while(t<3585){
+      const region=Math.floor(t/600),theme=themes[index%3===0?0:(region+index)%3];
+      let prev=null,previousEvent=null;
+      for(let j=0;j<theme.length&&t<3597;j++){
+        const item=theme[j],last=j===theme.length-1;
+        let degree=item.d;
+        if(index>1&&!last&&rng()<.10+.15*p.variety/100)degree+=pick([-1,1]);
+        if(kind==='alap'&&t<85)degree=Math.min(3,degree);
+        const [n,c]=pitch(degree);
+        const ornament=j>0&&!last&&((kind==='air'||kind==='bamboo')?rng()<.44/space:kind==='persian'&&rng()<.23/space);
+        if(ornament){const [g,gc]=pitch(degree+1);note(0,t,.07,g,42,gc);t+=.09;}
+        const bends=['wind','voice','bow'].includes(a.family);
+        let slide=0;
+        if(bends&&prev!==null&&n!==prev){
+          const amount=kind==='alap'?165:kind==='bayati'?74:kind==='persian'?83:kind==='call'&&a.family==='bow'?27:0;
+          if(amount&&j%3!==0)slide=clip((prev-n)*100,-amount,amount);
+        }
+        const duration=item.len*(.90+.20*rng())*(a.family==='strike'?.64:a.family==='pluck'?.81:1);
+        // A short overlap requests recorded legato only where both notes share neutral tuning.
+        if(previousEvent&&!ornament&&!c&&!slide&&!previousEvent.cents&&!previousEvent.slide&&n!==prev&&
+           (a.family==='voice'||a.family==='bow'||['ney','dwney','duduk','turkish'].includes(l.id))&&
+           t-(previousEvent.t+previousEvent.d)/ppq<.28&&j%3===1){
+          previousEvent.d=Math.round(t*ppq)-previousEvent.t+18;
+        }
+        note(0,t,duration,n,43+item.accent*16+(j===0?5:0),c,slide);
+        previousEvent=tracks[0].at(-1);
+        t+=duration+(kind==='ring'?1.7:kind==='space'?1.1:a.family==='pluck'?.14:.045)+rng()*(wind?.2:.12);
+        if(wind&&j===Math.floor(theme.length/2))t+=.45+rng()*.65;
+        prev=n;
+      }
+      t+=gap*space*(.60+rng()*.85)*(region===3||region===5?1.4:1);index++;
+    }
+  }
+  function valid(p){return p&&Object.hasOwn(libs,p.library)&&libs[p.library][0].includes(p.style)&&p.version===1&&(!p.lead||validLead(p.lead))&&
     Number.isInteger(p.seed)&&p.seed>=0&&p.seed<=4294967295&&Number.isInteger(p.variety)&&p.variety>=0&&p.variety<=100&&
     typeof p.pulse==='boolean'&&Number.isInteger(p.hit)&&p.hit>=0&&p.hit<=127;}
   function compose(p){
@@ -110,6 +264,7 @@ const SC=(()=>{
       const fade=Math.min(1,(t+2)/30,(3600-t)/75);
       controls[r].push({t:t*ppq,x:Math.round((75+32*intensity(t))*fade)});
     }
+    if(p.lead)writeLead(p,root,note,tracks,controls,inst);
     return {tracks,controls,inst};
   }
   const range=i=>i<0?[0,total]:[i*600*ppq,(i+1)*600*ppq];
@@ -149,6 +304,6 @@ const SC=(()=>{
     });
     return Uint8Array.from([...bytes('MThd'),0,0,0,6,0,lane<0?1:0,0,chunks.length,1,224,...chunks.flat()]);
   }
-  return {parts,libs,names,styles,channels,chapters,total,ppq,range,compose,midi,valid};
+  return {catalog,choices,leadStyles,defaultLead,parts,libs,names,styles,channels,chapters,total,ppq,range,compose,midi,valid};
 })();
 if(typeof module!=='undefined')module.exports=SC;

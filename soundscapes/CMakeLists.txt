@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Soundscapes VERSION 1.0.0 LANGUAGES C CXX)
+project(Soundscapes VERSION 1.1.0 LANGUAGES C CXX)
 if(NOT APPLE)
     message(FATAL_ERROR "The plug-in target is macOS. The offline edition runs in a browser.")
 endif()

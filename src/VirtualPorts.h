@@ -3,6 +3,7 @@
 #include <mach/mach_time.h>
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <string>
 
 // Four real CoreMIDI sources. Stable endpoint IDs let Live reconnect after
@@ -27,7 +28,10 @@ public:
     static std::string prefix(int index) {return index<=1?"Songweave":"Songweave "+std::to_string(index);}
     bool open(int preferred=1) {
         if(slot)return true;
-        if(!client && MIDIClientCreate(CFSTR("Songweave MIDI"),nullptr,nullptr,&client)!=noErr)return false;
+        if(!client){
+            const auto status=MIDIClientCreate(CFSTR("Songweave MIDI"),nullptr,nullptr,&client);
+            if(status!=noErr){std::fprintf(stderr,"Songweave MIDI client: %d\n",int(status));return false;}
+        }
         if(preferred<1||preferred>128)preferred=1;
         for(int pass=0;pass<=128;++pass){
             const int number=pass==0?preferred:pass;
@@ -41,14 +45,18 @@ public:
                 const auto name=prefix(number)+" "+labels[r];
                 const auto cf=CFStringCreateWithCString(nullptr,name.c_str(),kCFStringEncodingUTF8);
                 auto err=MIDISourceCreateWithProtocol(client,cf,kMIDIProtocol_1_0,&sources[r]);
-                if(err==noErr)err=MIDIObjectSetIntegerProperty(sources[r],kMIDIPropertyUniqueID,base+r);
-                if(err==noErr)err=MIDIObjectSetStringProperty(sources[r],kMIDIPropertyDisplayName,cf);
+                const char* operation="create source";
+                if(err==noErr){
+                    operation="set endpoint ID";err=MIDIObjectSetIntegerProperty(sources[r],kMIDIPropertyUniqueID,base+r);
+                }
+                // CoreMIDI derives displayName from the endpoint name. Some servers expose it read-only.
+                if(err==noErr)MIDIObjectSetStringProperty(sources[r],kMIDIPropertyName,cf);
                 CFRelease(cf);
-                if(err!=noErr){discardSources();return false;}
+                if(err!=noErr){std::fprintf(stderr,"Songweave %s (%s): %d\n",operation,name.c_str(),int(err));discardSources();return false;}
             }
             slot=number;return true;
         }
-        return false;
+        std::fprintf(stderr,"Songweave: no free MIDI port IDs.\n");return false;
     }
     MIDIEndpointRef endpoint(int lane) const {return sources[lane];}
     std::uint64_t timestamp(std::uint64_t origin,int offset,double rate) const {

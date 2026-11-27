@@ -7,7 +7,7 @@ mkdir -p "$stage" dist
 bundle="$stage/Songweave.vst3"
 ditto "build/Songweave_artefacts/Release/VST3/Songweave.vst3" "$bundle"
 binary="$bundle/Contents/MacOS/Songweave"
-lipo -verify_arch arm64 x86_64 "$binary"
+lipo "$binary" -verify_arch arm64 x86_64
 codesign --force --sign - "$bundle"
 codesign --verify --strict "$bundle"
 destination="/Library/Audio/Plug-Ins/VST3"

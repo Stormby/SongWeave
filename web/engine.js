@@ -235,7 +235,7 @@ const SW = (() => {
     const sec=song.sections[scope];
     return sec?[sec.bar*song.barTicks,(sec.bar+sec.bars)*song.barTicks]:[0,song.total];
   }
-  function midi(song,part=-1,scope=-1,bpm=song.config.bpm) {
+  function midi(song,part=-1,scope=-1,bpm=song.config.bpm,channels=[1,2,3,4]) {
     const [from,to]=region(song,scope), c=song.config;
     const str=s=>Array.from(new TextEncoder().encode(s));
     const word=x=>[x>>8&255,x&255], long=x=>[x>>>24,x>>16&255,x>>8&255,x&255];
@@ -255,11 +255,12 @@ const SW = (() => {
     if(part<0)chunks.push(chunk([evt(0,-6,meta(3,str('Song map'))),...info]));
     for(let r=0;r<4;r++){
       if(part>=0&&part!==r)continue;
-      const events=[evt(0,-6,meta(3,str(parts[r]))),evt(0,-2,[192+r,styles[c.genre].programs[r]])];
+      const channel=channels[r]-1;
+      const events=[evt(0,-6,meta(3,str(parts[r]))),evt(0,-2,[192+channel,styles[c.genre].programs[r]])];
       if(part>=0)events.push(...info);
       for(const n of song.tracks[r]){
         if(n.t>=to||n.t+n.d<=from)continue;
-        events.push(evt(Math.max(n.t,from)-from,1,[144+r,n.n,n.v]),evt(Math.min(n.t+n.d,to)-from,0,[128+r,n.n,0]));
+        events.push(evt(Math.max(n.t,from)-from,1,[144+channel,n.n,n.v]),evt(Math.min(n.t+n.d,to)-from,0,[128+channel,n.n,0]));
       }
       chunks.push(chunk(events));
     }

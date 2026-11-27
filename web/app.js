@@ -5,6 +5,7 @@
   const fresh=()=>SW.project(SW.defaults(),seed());
   const emit=(type,body={})=>bridge?.emitEvent('songweave',{type,...body});
   let p=fresh(),song,scope=-1,history=[],mute=[false,false,false,false],solo=[false,false,false,false],hostTempo=0;
+  let route="internal",channels=[1,2,3,4],portSlot=0,portError=false,referenceScore,sharedMidi="";
   let ready=!bridge,playing=false,awaitingPreview=false,epoch=0,cacheTimer,context,timer,playFrom=0,playTo=0,startTime=0,clock=0,position=0,queue=[],index=0;
   const active=new Set(), native=Boolean(bridge);
   const bpm=()=>native&&$('sync').checked&&hostTempo>0?hostTempo:p.config.bpm;
@@ -14,17 +15,34 @@
   options('genre',Object.keys(SW.styles));options('key',SW.keys);options('mode',Object.keys(SW.scales));
   options('meter',Object.keys(SW.meters));options('form',Object.keys(SW.forms));options('bars',[32,64,96,128]);
   $('syncWrap').style.display=native?'flex':'none';
+  $('routingWrap').hidden=!native;
+  function routingHint(){
+    const prefix=portSlot>1?'Songweave '+portSlot:'Songweave';
+    $('routingHint').textContent=route==='virtual'?(portError?'macOS could not open the MIDI ports. Switch to Preview sounds, then select Virtual ports to retry.':
+      'In Live, enable Track for the four '+prefix+' inputs. Choose one per instrument track and set Monitor to In.'):
+      route==='vst'?'The four parts share one VST3 MIDI output. Use Virtual ports for separate Live tracks.':'';
+  }
   function remember(){history.push(JSON.stringify(p));if(history.length>24)history.shift();}
-  function stored(){return JSON.stringify({project:p,sync:$('sync').checked,scope,mute,solo});}
+  function stored(){return JSON.stringify({project:p,sync:$('sync').checked,scope,mute,solo,output:route,channels});}
   function persist(){
     if(!ready)return;
-    if(native)emit('state',{json:stored(),epoch});else try{localStorage.setItem('songweave.v1',stored());}catch{}
+    if(native){
+      const state=JSON.parse(stored());
+      if(route!=='internal'){
+        if(referenceScore!==song){sharedMidi=encoded(SW.midi(song));referenceScore=song;}
+        state.midiData=sharedMidi;
+      }
+      emit('state',{json:JSON.stringify(state),epoch});
+    }else try{localStorage.setItem('songweave.v1',stored());}catch{}
   }
   function restore(data){
     const saved=typeof data==='string'?JSON.parse(data):data, item=saved?.project??saved;
     if(!SW.valid(item))throw Error('This file is not a supported Songweave project.');
     p=item;scope=Number.isInteger(saved.scope)&&saved.scope>=0&&saved.scope<SW.sections(p.config).length?saved.scope:-1;
     const flags=a=>Array.isArray(a)&&a.length===4&&a.every(x=>typeof x==='boolean')?a:[false,false,false,false];
+    route=['virtual','vst'].includes(saved.output)?saved.output:'internal';
+    channels=Array.isArray(saved.channels)&&saved.channels.length===4&&new Set(saved.channels).size===4&&
+      saved.channels.every(ch=>Number.isInteger(ch)&&ch>=1&&ch<=16)?saved.channels.slice():[1,2,3,4];
     mute=flags(saved.mute);solo=flags(saved.solo);$('sync').checked=saved.sync!==false;
   }
   function loading(data){
@@ -45,7 +63,7 @@
     a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);
   }
   function saveMidi(r){
-    const bytes=SW.midi(song,r,scope,bpm()),name=fileName(r);
+    const bytes=SW.midi(song,r,scope,bpm(),channels),name=fileName(r);
     if(native)emit('save',{name,data:encoded(bytes)});else download(bytes,name,'audio/midi');
     if(!native)status(name+' • ready for Arrangement View.');
   }
@@ -55,7 +73,7 @@
     // Native drag handles always refer to a complete, immutable MIDI file.
     emit('clearDrags');
     cacheTimer=setTimeout(()=>{
-      const files=[-1,0,1,2,3].map(r=>({name:fileName(r),data:encoded(SW.midi(song,r,scope,bpm()))}));
+      const files=[-1,0,1,2,3].map(r=>({name:fileName(r),data:encoded(SW.midi(song,r,scope,bpm(),channels))}));
       emit('cache',{files});
     },45);
   }
@@ -80,6 +98,7 @@
   function render(recompose=true){
     if(recompose)song=SW.compose(p);
     const c=p.config;
+    $('route').value=route;routingHint();
     $('form').querySelector('[data-custom]')?.remove();$('bars').querySelector('[data-custom]')?.remove();
     if(c.layout){
       const opt=new Option('Custom','custom');opt.dataset.custom='true';$('form').add(opt);
@@ -106,7 +125,7 @@
     $('variation').textContent=scope<0?'Variation':'Vary section';$('back').disabled=!history.length;
     $('variation').disabled=$('new').disabled=p.locks.every(Boolean);$('rows').replaceChildren();
     SW.parts.forEach((part,r)=>{
-      const row=document.createElement('div');row.className='row';
+      const row=document.createElement('div');row.className=native&&route!=='internal'?'row routed':'row';
       const b=document.createElement('b');b.textContent=part;b.style.color=colors[r];row.append(b);
       const canvas=document.createElement('canvas');canvas.setAttribute('aria-label',part+' note overview');draw(canvas,r);row.append(canvas);
       function button(label,flag,action,title){
@@ -114,9 +133,19 @@
         if(flag!==undefined)el.setAttribute('aria-pressed',flag);el.onclick=action;row.append(el);
       }
       button('Lock',p.locks[r],()=>{p.locks[r]=!p.locks[r];render(false);},'Lock '+part+' across variations and new ideas');
-      button('Solo',solo[r],()=>{solo[r]=!solo[r];mix();},'Solo '+part+' in preview');
-      button('Mute',mute[r],()=>{mute[r]=!mute[r];mix();},'Mute '+part+' in preview');
-      button('MIDI',undefined,()=>saveMidi(r),'Export '+part+' MIDI');$('rows').append(row);
+      button('Solo',solo[r],()=>{solo[r]=!solo[r];mix();},'Solo '+part+' in playback');
+      button('Mute',mute[r],()=>{mute[r]=!mute[r];mix();},'Mute '+part+' in playback');
+      button('MIDI',undefined,()=>saveMidi(r),'Export '+part+' MIDI');
+      if(native&&route!=='internal'){
+        const picker=document.createElement('select');picker.setAttribute('aria-label',part+' MIDI channel');
+        for(let ch=1;ch<=16;ch++)picker.add(new Option('Ch '+ch,ch));
+        picker.value=channels[r];picker.onchange=()=>{
+          const ch=Number(picker.value),other=channels.indexOf(ch);
+          if(other>=0)channels[other]=channels[r];
+          channels[r]=ch;render(false);
+        };row.append(picker);
+      }
+      $('rows').append(row);
     });
     $('play').textContent=playing?'■ Stop':'▶ Preview';
     if(!playing)$('progress').value=SW.region(song,scope)[0]/song.total;
@@ -138,7 +167,7 @@
       t:Math.max(n.t,from)-from,d:Math.min(n.t+n.d,to)-Math.max(n.t,from),n:n.n,v:n.v,r}))).sort((a,b)=>a.t-b.t);
     playFrom=from;playTo=to;index=0;clock=60/bpm()/SW.PPQ;playing=true;$('play').textContent='■ Stop';
     if(native){
-      awaitingPreview=true;emit('play',{events:queue,length:to-from,bpm:bpm(),sync:$('sync').checked,
+      awaitingPreview=true;emit('play',{from,events:queue,length:to-from,bpm:bpm(),sync:$('sync').checked,
         mask:SW.parts.reduce((v,_,r)=>v|(audible(r)?1<<r:0),0)});return;
     }
     try{
@@ -184,6 +213,7 @@
   for(const action of ['left','right','repeat','remove'])$(action).onclick=()=>edit(action);
   $('bpm').onchange=()=>{const n=Number($('bpm').value);if(!Number.isFinite(n)||n<20||n>400){summary();return;}
     remember();stop();p.config.bpm=n;render();};
+  $('route').onchange=()=>{stop();route=$('route').value;portError=false;render(false);};
   $('sync').onchange=()=>{stop();render(false);};
   $('play').onclick=preview;$('whole').onclick=()=>setScope(-1);
   $('new').onclick=()=>{stop();remember();p=SW.newIdea(p,seed());scope=-1;render();status('New take. Locked parts are preserved.');};
@@ -202,6 +232,7 @@
     });
     listen('swStarted',()=>{awaitingPreview=false;});
     listen('swClock',msg=>{
+      if(portSlot!==msg.portSlot||portError!==msg.portError){portSlot=msg.portSlot||0;portError=!!msg.portError;routingHint();}
       if(hostTempo!==msg.bpm){hostTempo=msg.bpm;summary();cache();}
       if(playing&&!awaitingPreview){$('progress').value=Math.min(1,(playFrom+msg.tick)/song.total);if(!msg.playing){playing=false;$('play').textContent='▶ Preview';}}
     });

@@ -47,6 +47,16 @@ function mount(native){
     ids.play.click();assert.equal(outputs.at(-1).type,'play');assert(outputs.at(-1).events.length>500);
     handlers.swClock({tick:480,bpm:112,playing:true});assert(ids.progress.value>0);
     ids.play.click();assert.equal(outputs.at(-1).type,'stop');
+    ids.route.value='virtual';ids.route.onchange();
+    assert.equal(read().output,'virtual');
+    assert.deepEqual(Buffer.from(read().midiData,'base64'),fs.readFileSync(root+'/examples/Cinematic.mid'));
+    const melody=ids.rows.children[0].children.at(-1);melody.value=3;melody.onchange();
+    assert.deepEqual(read().channels,[3,2,1,4]);
+    ids.export.click();const exported=Buffer.from(outputs.at(-1).data,'base64');
+    const engine=require('../web/engine.js'),arr=engine.compose(JSON.parse(sample).project);
+    assert.deepEqual(exported,Buffer.from(engine.midi(arr,-1,-1,arr.config.bpm,[3,2,1,4])));
+    handlers.swInit({state:JSON.stringify(read()),bpm:100,epoch:4});
+    assert.equal(ids.route.value,'virtual');assert.equal(ids.rows.children[2].children.at(-1).value,1);
   }
 }
 mount(false);mount(true);

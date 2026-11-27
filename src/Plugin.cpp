@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstring>
 #include "Audition.h"
+#include "LiveMidi.h"
 
 namespace {
 using namespace juce;
@@ -19,9 +20,10 @@ class Composer final : public AudioProcessor {
     String savedState;
     Audition audition;
     std::atomic<int> mask {15};
-    double previewBpm = 90;
+    double previewBpm = 90, previewFrom = 0, previewEnd = 0;
     bool followHost = true;
 public:
+    LiveMidi midi;
     std::atomic<double> hostBpm {0}, progress {0};
     std::atomic<bool> active {false};
     std::atomic<unsigned> restored {0};
@@ -31,14 +33,14 @@ public:
     ~Composer() override { dragFolder.deleteRecursively(); }
     const String getName() const override { return "Songweave"; }
     bool acceptsMidi() const override { return true; }
-    bool producesMidi() const override { return false; }
+    bool producesMidi() const override { return true; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return .05; }
     bool isBusesLayoutSupported(const BusesLayout& layout) const override {
         return layout.getMainOutputChannelSet() == AudioChannelSet::stereo();
     }
     void prepareToPlay(double, int) override { stop(); }
-    void releaseResources() override { stop(); }
+    void releaseResources() override { stop(); midi.suspend(); }
     void stop() {
         SpinLock::ScopedLockType guard(playbackLock);
         audition.stop(); active.store(false);
@@ -57,6 +59,7 @@ public:
         std::stable_sort(notes.begin(), notes.end(), [](const auto& a, const auto& b){ return a.tick < b.tick; });
         {
             SpinLock::ScopedLockType guard(playbackLock);
+            previewFrom = double(msg["from"]); previewEnd = previewFrom + double(msg["length"]);
             previewBpm = jlimit(20.,400.,double(msg["bpm"])); followHost = bool(msg["sync"]);
             mask.store(int(msg["mask"]) & 15); audition.start(notes, double(msg["length"]));
             progress.store(0); active.store(audition.playing);
@@ -66,32 +69,65 @@ public:
     void processBlock(AudioBuffer<float>& output, MidiBuffer& input) override {
         ScopedNoDenormals guard;
         input.clear(); output.clear();
-        double tempo = 0;
-        if (auto* head = getPlayHead())
-            if (const auto pos = head->getPosition())
-                if (const auto value = pos->getBpm()) tempo = *value;
-        hostBpm.store(std::isfinite(tempo) && tempo > 0 ? tempo : 0);
-        SpinLock::ScopedTryLockType lock(playbackLock);
-        if (!lock.isLocked() || output.getNumChannels() < 2 || !audition.playing) return;
-        audition.render(output.getWritePointer(0), output.getWritePointer(1), output.getNumSamples(),
-            getSampleRate(), followHost && tempo > 0 ? tempo : previewBpm, mask.load());
-        progress.store(audition.tick); active.store(audition.playing);
+        double tempo=0, hostTick=0;
+        bool transport=false;
+        if(auto* head=getPlayHead())if(const auto pos=head->getPosition()){
+            if(const auto value=pos->getBpm())tempo=*value;
+            if(const auto ppq=pos->getPpqPosition()){
+                hostTick=*ppq*480.0;transport=pos->getIsPlaying() && std::isfinite(hostTick);
+            }
+        }
+        if(!std::isfinite(tempo)||tempo<=0)tempo=0;
+        hostBpm.store(tempo);
+        int source=0;
+        double tick=0,limit=std::numeric_limits<double>::max(),rate=getSampleRate(),speed=tempo>0?tempo:120;
+        const bool routing=midi.routed.load();
+        {
+            SpinLock::ScopedTryLockType lock(playbackLock);
+            if(lock.isLocked() && transport && routing && audition.playing){audition.stop();active.store(false);}
+            if(transport && routing){source=1;tick=hostTick;}
+            else if(lock.isLocked() && audition.playing && output.getNumChannels()>=2){
+                source=2; tick=previewFrom+audition.tick; limit=previewEnd;
+                speed=followHost && tempo>0?tempo:previewBpm;
+                audition.render(output.getWritePointer(0),output.getWritePointer(1),output.getNumSamples(),rate,speed,mask.load());
+                if(routing)output.clear();
+                progress.store(audition.tick);active.store(audition.playing);
+            }
+        }
+        midi.block(input,output.getNumSamples(),rate,speed,source,tick,limit,mask.load(),isNonRealtime());
     }
     String state() { ScopedLock lock(stateLock); return savedState; }
     void edit(const String& value) {
         { ScopedLock lock(stateLock); if (savedState == value) return; savedState = value; }
+        const auto parsed=JSON::parse(value);
+        configureMidi(parsed);
         updateHostDisplay(ChangeDetails().withNonParameterStateChanged(true));
     }
+    void configureMidi(const var& parsed) {
+        midi.configure(parsed);
+        int bits=15;
+        const auto* solo=parsed["solo"].getArray();const auto* mute=parsed["mute"].getArray();
+        if(solo && mute && solo->size()==4 && mute->size()==4){
+            const bool any=std::any_of(solo->begin(),solo->end(),[](const var& v){return bool(v);});
+            bits=0;for(int r=0;r<4;++r)if(!bool(mute->getReference(r))&&(!any||bool(solo->getReference(r))))bits|=1<<r;
+        }
+        setMask(bits);
+    }
     void getStateInformation(MemoryBlock& dest) override {
-        const auto s = state(); dest.setSize(s.getNumBytesAsUTF8());
+        auto s = state();
+        if(midi.portNumber.load()>0){
+            auto parsed=JSON::parse(s);
+            if(auto* obj=parsed.getDynamicObject()){obj->setProperty("portSlot",midi.portNumber.load());s=JSON::toString(parsed,true);}
+        } dest.setSize(s.getNumBytesAsUTF8());
         if (dest.getSize()) std::memcpy(dest.getData(), s.toRawUTF8(), dest.getSize());
     }
     void setStateInformation(const void* data, int size) override {
-        if (size <= 0 || size > 1048576) return;
+        if (size <= 0 || size > 2097152) return;
         const auto s = String::fromUTF8(static_cast<const char*>(data),size);
-        if (!JSON::parse(s).isObject()) return;
+        const auto parsed=JSON::parse(s); if (!parsed.isObject()) return;
         stop();
-        ScopedLock lock(stateLock); savedState = s; ++restored;
+        { ScopedLock lock(stateLock); savedState = s; ++restored; }
+        configureMidi(parsed);
     }
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -221,7 +257,7 @@ class Editor final : public AudioProcessorEditor, private Timer {
     void timerCallback() override {
         if (!ready) return;
         if (!initialised || seen != proc.restored.load()) { init(); return; }
-        send("swClock",object({{"tick",proc.progress.load()},{"bpm",proc.hostBpm.load()},{"playing",proc.active.load()}}));
+        send("swClock",object({{"tick",proc.progress.load()},{"bpm",proc.hostBpm.load()},{"playing",proc.active.load()},{"portSlot",proc.midi.portNumber.load()},{"portError",proc.midi.portError.load()}}));
     }
 public:
     explicit Editor(Composer& p) : AudioProcessorEditor(p), proc(p), web(options()) {

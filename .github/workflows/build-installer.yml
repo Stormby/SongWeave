@@ -21,8 +21,10 @@ jobs:
           "$RUNNER_TEMP/audition"
       - name: Compile universal VST3
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
-          cmake --build build --config Release --target Songweave_VST3 --parallel 2
+          cmake -S . -B build -DSONGWEAVE_ROUTING_TEST=ON -DCMAKE_BUILD_TYPE=Release '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
+          cmake --build build --config Release --target Songweave_VST3 SongweaveRoutingTest --parallel 2
+      - name: Verify four virtual MIDI ports and VST3 output
+        run: build/SongweaveRoutingTest
       - name: Package and install on the test Mac
         run: bash tools/package-for-installer.sh
       - name: Validate installed VST3

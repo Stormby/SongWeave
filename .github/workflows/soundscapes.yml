@@ -1,0 +1,48 @@
+name: Build SongWave Soundscapes
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: soundscapes
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test composition engine
+        run: |
+          node tests/composition.test.js
+          node tests/workshop.test.js
+      - name: Check CoreMIDI source registration
+        run: |
+          c++ -std=c++17 -Isrc -framework CoreMIDI -framework CoreFoundation -x c++ -o "$RUNNER_TEMP/check-ports" - <<'CPP'
+          #include "VirtualPorts.h"
+          int main() { VirtualPorts ports; return ports.open() ? 0 : 1; }
+          CPP
+          "$RUNNER_TEMP/check-ports"
+      - name: Compile universal VST3
+        run: |
+          cmake -S . -B build -DSONGWEAVE_ROUTING_TEST=ON -DCMAKE_BUILD_TYPE=Release '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
+          cmake --build build --config Release --target Soundscapes_VST3 Soundscapes_Standalone SoundscapesRoutingTest --parallel 2
+      - name: Verify six virtual MIDI ports and VST3 output
+        run: build/SoundscapesRoutingTest
+      - name: Package and install on the test Mac
+        run: bash tools/package-for-installer.sh
+      - name: Validate installed VST3
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 https://github.com/Tracktion/pluginval/releases/download/v1.0.3/pluginval_macOS.zip -o "$RUNNER_TEMP/pluginval.zip"
+          ditto -x -k "$RUNNER_TEMP/pluginval.zip" "$RUNNER_TEMP/pluginval"
+          validator=$(find "$RUNNER_TEMP/pluginval" -path '*/Contents/MacOS/pluginval' -type f -print -quit)
+          test -x "$validator"
+          "$validator" --strictness-level 5 --validate "/Library/Audio/Plug-Ins/VST3/SongWave Soundscapes.vst3"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SongWave-Soundscapes-Mac
+          path: soundscapes/dist/SongWave-Soundscapes-1.1-Mac.pkg
+          if-no-files-found: error

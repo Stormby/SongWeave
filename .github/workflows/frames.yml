@@ -18,6 +18,11 @@ jobs:
         run: |
           node tests/composition.test.js
           node tests/workshop.test.js
+      - name: Check the hour-long piano roll in Chrome
+        run: |
+          python3 -m venv "$RUNNER_TEMP/frames-web"
+          "$RUNNER_TEMP/frames-web/bin/pip" install --quiet playwright==1.56.0
+          "$RUNNER_TEMP/frames-web/bin/python" tests/editor-browser.py
       - name: Check CoreMIDI source registration
         run: |
           c++ -std=c++17 -Isrc -framework CoreMIDI -framework CoreFoundation -x c++ -o "$RUNNER_TEMP/check-ports" - <<'CPP'

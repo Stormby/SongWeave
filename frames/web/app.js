@@ -72,6 +72,17 @@
     el('back').disabled=firstBar<=begin;el('forward').disabled=firstBar+span>=end;
     el('rollinfo').textContent=(focus<0?'All instruments':F.parts[focus])+' · Bars '+(firstBar+1)+'–'+(firstBar+span)+(score!==song?' · Melody audition':'');
   }
+  el('roll').onclick=event=>{
+    const score=displayScore||song,begin=scope<0?0:score.sections[scope].bar;
+    const end=scope<0||scope===5?score.bars:score.sections[scope+1].bar;
+    const box=el('roll').getBoundingClientRect();
+    const fraction=Math.max(0,Math.min(1,((event.clientX-box.left)/box.width*960-43)/917));
+    firstBar+=Math.floor(fraction*Math.min(zoom||end-begin,end-begin));zoom=4;el('zoom').value='4';drawRoll(score);
+  };
+  el('listenBars').onclick=()=>{
+    const score=displayScore||song,end=scope<0||scope===5?score.bars:score.sections[scope+1].bar;
+    preview(score,firstBar*score.barTicks,Math.min(end,firstBar+(zoom||end))*score.barTicks,score!==song);
+  };
   el('zoom').onchange=()=>{zoom=Number(el('zoom').value);drawRoll();};
   el('view').onchange=()=>{focus=Number(el('view').value);drawRoll();};
   options('view',['All instruments',...F.parts],[-1,0,1,2,3,4,5]);

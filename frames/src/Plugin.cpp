@@ -19,6 +19,7 @@ class Composer final : public AudioProcessor {
     CriticalSection stateLock;
     String savedState;
     Audition audition;
+    juce::Reverb previewRoom;
     std::atomic<int> mask {lanes::all};
     bool temporaryPreview=false;
     double previewBpm = 90, previewFrom = 0, previewEnd = 0;
@@ -40,7 +41,11 @@ public:
     bool isBusesLayoutSupported(const BusesLayout& layout) const override {
         return layout.getMainOutputChannelSet() == AudioChannelSet::stereo();
     }
-    void prepareToPlay(double, int) override { stop(); }
+    void prepareToPlay(double rate, int) override {
+        stop();previewRoom.setSampleRate(rate>0?rate:44100.);
+        Reverb::Parameters room;room.roomSize=.59f;room.damping=.70f;room.wetLevel=.13f;room.dryLevel=.83f;
+        previewRoom.setParameters(room);previewRoom.reset();
+    }
     void releaseResources() override { stop(); midi.suspend(); }
     void stop() {
         SpinLock::ScopedLockType guard(playbackLock);
@@ -59,13 +64,24 @@ public:
                     velocity <= 127 && t >= 0 && d > 0) notes.push_back({t,d,pitch,velocity,part,int(n["k"]),double(n["cents"]),double(n["slide"])});
             }
         }
+        std::vector<ToneChange> controls;
+        if(const auto* changes=msg["movement"].getArray()){
+            controls.reserve(size_t(changes->size()));
+            for(const auto& item:*changes){
+                if(const auto* c=item.getArray();c&&c->size()==3){
+                    const int lane=c->getReference(1);
+                    if(isPositiveAndBelow(lane,lanes::count))controls.push_back({double(c->getReference(0)),lane,jlimit(0,127,int(c->getReference(2)))/127.});
+                }
+            }
+            std::stable_sort(controls.begin(),controls.end(),[](const auto& a,const auto& b){return a.tick<b.tick;});
+        }
         std::stable_sort(notes.begin(), notes.end(), [](const auto& a, const auto& b){ return a.tick < b.tick; });
         {
             SpinLock::ScopedLockType guard(playbackLock);
             temporaryPreview=temporaryMidi.isNotEmpty();
             previewFrom = double(msg["from"]); previewEnd = previewFrom + double(msg["length"]);
             previewBpm = jlimit(20.,400.,double(msg["bpm"])); followHost = bool(msg["sync"]);
-            mask.store(int(msg["mask"]) & lanes::all); audition.start(notes, double(msg["length"]));
+            mask.store(int(msg["mask"]) & lanes::all); previewRoom.reset(); audition.start(notes, double(msg["length"]),controls);
             progress.store(0); active.store(audition.playing);
         }
     }
@@ -96,6 +112,7 @@ public:
                 speed=followHost && tempo>0?tempo:previewBpm;
                 audition.render(output.getWritePointer(0),output.getWritePointer(1),output.getNumSamples(),rate,speed,mask.load());
                 if(routing)output.clear();
+                else previewRoom.processStereo(output.getWritePointer(0),output.getWritePointer(1),output.getNumSamples());
                 progress.store(audition.tick);active.store(audition.playing);
             }
         }
@@ -127,7 +144,7 @@ public:
         if (dest.getSize()) std::memcpy(dest.getData(), s.toRawUTF8(), dest.getSize());
     }
     void setStateInformation(const void* data, int size) override {
-        if (size <= 0 || size > 2097152) return;
+        if (size <= 0 || size > 12582912) return;
         const auto s = String::fromUTF8(static_cast<const char*>(data),size);
         const auto parsed=JSON::parse(s); if (!parsed.isObject()) return;
         stop();

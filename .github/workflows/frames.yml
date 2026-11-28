@@ -44,5 +44,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: SongWave-Frames-Mac
-          path: frames/dist/SongWave-Frames-1.0-Mac.pkg
+          path: frames/dist/SongWave-Frames-1.1-Mac.pkg
           if-no-files-found: error

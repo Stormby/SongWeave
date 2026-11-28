@@ -23,7 +23,7 @@ for(const theme of Object.keys(F.themes)){
       assert(n.d>0&&n.t>=0&&n.t+n.d<=s.total&&n.v>0&&n.v<128&&n.t>=(ends.get(n.n)||0));ends.set(n.n,n.t+n.d);
     }});
     assert(mode===2||s.cc[0].some(c=>c.cc===64&&c.v>=64));
-    for(const lane of s.cc.slice(1)){assert(lane.some(e=>e.cc===1&&e.v>0));assert.equal(lane.at(-1).v,0);}
+    for(const [idx,lane] of s.cc.slice(1).entries()){if(!s.tracks[idx+1].length){assert.equal(lane.length,0);continue;}assert(lane.some(e=>e.cc===1&&e.v>0));assert.equal(lane.at(-1).v,0);}
   }
   const p={...F.defaults(),theme,minutes:3},a=F.compose(p),b=F.compose({...p,melody:426891});
   assert.notEqual(hash(a.tracks[0]),hash(b.tracks[0]));assert.deepEqual(a.tracks.slice(2),b.tracks.slice(2));assert.deepEqual(a.cc,b.cc);
@@ -39,3 +39,12 @@ for(const theme of Object.keys(F.themes)){
     assert.equal(full[i+1].filter(x=>x[1]===176+i).length,a.cc[i].length);
   }
 }console.log('Verified styles, complexity, duration, controller export, stem parity, unique melodies and backing retention.');
+
+for(const theme of Object.keys(F.themes)){
+  const p={...F.defaults(),theme,minutes:60,seed:324199,level:2},s=F.compose(p);
+  assert.equal(s.total/s.bpm/480,60);
+  s.tracks.forEach((notes,i)=>assert(notes.every(n=>n.n>=(i===4?36:24))));
+  const full=parse(F.midi(s));assert.deepEqual(full[0].at(-1),[s.total,255,47]);
+  const meter=full[0].find(e=>e[1]===255&&e[2]===88);assert.equal(meter[3],theme==='Yann Tiersen'?3:4);
+  assert.deepEqual(full[0].filter(e=>e[1]===255&&e[2]===6).map(e=>e[0]),s.sections.map(sec=>sec.bar*s.barTicks));
+}

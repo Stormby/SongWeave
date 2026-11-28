@@ -18,7 +18,7 @@ class LiveMidi {
     std::array<std::uint64_t,lanes::count> lastStamp{};
     static bool decode(const juce::String& encoded,MidiTimeline& track,double& total) {
         juce::MemoryOutputStream bytes;
-        if(encoded.length()>1048576||!juce::Base64::convertFromBase64(bytes,encoded))return false;
+        if(encoded.length()>8388608||!juce::Base64::convertFromBase64(bytes,encoded))return false;
         juce::MemoryInputStream in(bytes.getData(),bytes.getDataSize(),false);
         juce::MidiFile file;
         if(!file.readFrom(in,false)||file.getTimeFormat()!=480||file.getNumTracks()!=lanes::count+1)return false;
